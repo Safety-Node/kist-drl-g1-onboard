@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>comm_bridge</name>
+  <version>0.0.1</version>
+  <description>
+    NX ↔ PC topic gateway. Relays /onboard/* topics to /bridge/* (and vice versa)
+    with QoS translation. Shares the same DDS Domain ID; uses CycloneDDS partition
+    filtering to keep /onboard/* off the Ethernet wire.
+  </description>
+  <maintainer email="park50260@gmail.com">박성용</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>kist_drl_g1_msgs</depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

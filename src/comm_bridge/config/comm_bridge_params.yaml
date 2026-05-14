@@ -1,0 +1,47 @@
+# comm_bridge package — runtime parameters
+# TODO(REQ-32): finalise topic remap table once /bridge/ schema is locked.
+
+outbound_relay:
+  ros__parameters:
+    # /onboard/<src>  ->  /bridge/<dst>
+    # Outbound QoS: BEST_EFFORT (sensor freshness wins)
+    relays:
+      - src: "/onboard/sensors/color/image_raw/compressed"
+        dst: "/bridge/sensors/color/compressed"
+        type: "sensor_msgs/msg/CompressedImage"
+      - src: "/onboard/sensors/depth/image_raw"
+        dst: "/bridge/sensors/depth/image_raw"
+        type: "sensor_msgs/msg/Image"
+      - src: "/onboard/sensors/audio/pcm"
+        dst: "/bridge/sensors/audio_pcm"
+        type: "kist_drl_g1_msgs/msg/AudioPCM"
+      - src: "/onboard/sensors/joint_states"
+        dst: "/bridge/sensors/joint_states"
+        type: "sensor_msgs/msg/JointState"
+      - src: "/onboard/sensors/uwb/pose"
+        dst: "/bridge/sensors/uwb_pose"
+        type: "geometry_msgs/msg/PoseStamped"  # UWB absolute pose (REQ-37) — for PC monitoring
+      - src: "/onboard/nav/state"
+        dst: "/bridge/nav/state"
+        type: "std_msgs/msg/String"          # TBD: replace with proper status type (REQ-32)
+      - src: "/onboard/motor/buf_state"
+        dst: "/bridge/motor/buf_state"
+        type: "std_msgs/msg/String"          # TBD: replace with proper status type (REQ-32)
+      - src: "/onboard/audio/speaker_state"
+        dst: "/bridge/audio/speaker_state"
+        type: "std_msgs/msg/String"
+
+inbound_relay:
+  ros__parameters:
+    # /bridge/<src>  ->  /onboard/<dst>
+    # Inbound QoS: RELIABLE (don't drop commands)
+    relays:
+      - src: "/bridge/cmd/joint"
+        dst: "/onboard/cmd/joint"
+        type: "sensor_msgs/msg/JointState"   # TBD(REQ-34): dedicated JointCmd type later
+      - src: "/bridge/cmd/nav_goal"
+        dst: "/onboard/cmd/nav_goal"
+        type: "geometry_msgs/msg/PoseStamped"
+      - src: "/bridge/cmd/audio_out"
+        dst: "/onboard/audio/playback"
+        type: "kist_drl_g1_msgs/msg/AudioPCM"
