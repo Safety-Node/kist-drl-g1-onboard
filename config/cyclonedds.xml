@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  CycloneDDS configuration for G1 Onboard.
+
+  - NX and PC share the same Domain ID. Topics under '/onboard/...' must NOT leave NX,
+    while topics under '/bridge/...' are allowed to cross the Ethernet link.
+  - We enforce the split with DDS partitions: every reader/writer is mapped into a
+    partition based on its topic name prefix, and the Internal/Partition match rules
+    are configured so that '/onboard/' subscribers never match remote writers.
+
+  Usage (NX side):
+    export CYCLONEDDS_URI=file://$(pwd)/config/cyclonedds.xml
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    ros2 launch comm_bridge comm_bridge.launch.py
+
+  TODO(REQ-32, REQ-33): wire the per-topic Partition assignment in comm_bridge once
+                        we finalise the QoS profile API for relays. Until then, this
+                        file applies global Domain settings only.
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <!-- TODO(REQ-33): pin NetworkInterfaceAddress to the NX↔PC LAN interface. -->
+      <Interfaces>
+        <NetworkInterface autodetermine="true" priority="default" multicast="default"/>
+      </Interfaces>
+      <AllowMulticast>default</AllowMulticast>
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+
+    <Internal>
+      <!-- Tight latency budget — favour shared-memory transport on NX. -->
+      <Watermarks>
+        <WhcHigh>2MB</WhcHigh>
+      </Watermarks>
+    </Internal>
+
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+</CycloneDDS>
