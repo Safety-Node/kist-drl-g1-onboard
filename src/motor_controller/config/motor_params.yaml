@@ -1,0 +1,22 @@
+# motor_controller — runtime parameters
+# TODO(REQ-34, REQ-38): tune chunk_size and crossfade once VLA Provider timings are measured on PC.
+
+motor_controller:
+  ros__parameters:
+    # Control loop
+    control_rate_hz: 20            # 50 ms tick
+    busy_wait_fraction: 0.2        # busy-wait the last 20% of each tick for low jitter
+
+    # Ring buffer
+    ring_buffer_slots: 64
+
+    # VLA action-chunk crossfade (joint_buf only — velocity_buf passes through)
+    chunk_size: 30
+    crossfade_threshold_g: 0.7     # SmolVLA §3.3 reference value (TBD)
+
+    # G1 SDK
+    network_interface: "eth0"      # TBD: confirm against onboard wiring
+    domain_id: 0
+
+    # E-STOP shared-memory flag (written by safety_monitor)
+    estop_shm_name: "safety_flag"

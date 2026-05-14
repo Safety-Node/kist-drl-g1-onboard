@@ -1,0 +1,26 @@
+# Install:  sudo cp motor_controller.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now motor_controller
+#
+# TODO(infra): pin the workspace overlay path and User= once deployment account is decided.
+
+[Unit]
+Description=G1 Motor Controller (20Hz Ring Buffer + E-STOP handler)
+After=network.target safety_monitor.service
+Wants=safety_monitor.service
+Documentation=https://www.notion.so/motor_controller-355b39de7dd781759dedda4d3e1a2b64
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -lc 'source /opt/ros/humble/setup.bash && \
+  source /opt/kist-drl-g1-onboard/install/setup.bash && \
+  ros2 run motor_controller motor_controller_node \
+       --ros-args --params-file /opt/kist-drl-g1-onboard/install/motor_controller/share/motor_controller/config/motor_params.yaml'
+Restart=always
+RestartSec=0.1
+Nice=-20
+CPUAffinity=1
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
