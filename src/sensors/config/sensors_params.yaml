@@ -1,0 +1,50 @@
+# sensors package — runtime parameters
+# TODO(REQ-42): fill real values once HW driver wrappers are integrated.
+
+audio_node:
+  ros__parameters:
+    # ALSA capture / playback device names (verify on Orin NX)
+    capture_device: "default"     # TBD: e.g. "hw:CARD=Mic,DEV=0"
+    playback_device: "default"    # TBD: e.g. "hw:CARD=Speaker,DEV=0"
+    sample_rate: 16000
+    channels: 1
+    chunk_ms: 20                  # publish 20 ms PCM chunks
+
+joint_state_node:
+  ros__parameters:
+    # G1 SDK low-state subscription
+    publish_rate_hz: 100
+    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface name
+    domain_id: 0                  # TBD: align with comm_bridge DDS domain
+
+camera_node:
+  ros__parameters:
+    # passed through to realsense2_camera; see its docs for full schema.
+    # Depth is consumed by safety_monitor (proximity E-STOP).
+    # Color/Depth are also forwarded to PC via comm_bridge for VLA inference.
+    enable_color: true
+    enable_depth: true
+    color_width: 1280
+    color_height: 720
+    color_fps: 30
+    depth_width: 1280
+    depth_height: 720
+    depth_fps: 30
+
+uwb_node:
+  ros__parameters:
+    # Vendor / transport — TBD(REQ-37): finalise once UWB module is picked.
+    transport: "serial"            # "serial" | "udp"
+    serial_port: "/dev/ttyUSB0"    # TBD
+    serial_baud: 115200            # TBD
+    udp_listen_port: 50000         # used if transport=="udp"
+    publish_rate_hz: 20            # UWB tag update rate (TBD)
+
+    # Frame conventions
+    frame_id: "map"                # UWB returns absolute coordinates in 'map' frame
+    child_frame_id: "base_link"
+
+    # Anchor calibration — TBD: populate after site survey
+    anchors:
+      # anchor_id: [x, y, z]  in metres, map frame
+      placeholder_anchor_0: [0.0, 0.0, 2.5]

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>sensors</name>
+  <version>0.0.1</version>
+  <description>
+    Onboard sensor publishers for Unitree G1: Camera (RealSense D435i), IMU, Microphone array,
+    Speaker playback, Joint State, and UWB pose.
+    LiDAR has been removed (replaced by UWB absolute localisation).
+    Reuses realsense2_camera as an external C++ driver; custom Python nodes handle audio (ALSA),
+    joint_state (G1 SDK), and UWB (vendor SDK).
+  </description>
+  <maintainer email="park50260@gmail.com">박성용</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>kist_drl_g1_msgs</depend>
+
+  <!-- External drivers launched from sensors.launch.py -->
+  <!-- TODO(REQ-42): verify availability on target apt repos / build from source as fallback -->
+  <exec_depend>realsense2_camera</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
