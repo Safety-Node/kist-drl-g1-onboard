@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>navigation</name>
+  <version>0.0.1</version>
+  <description>
+    Minimal point-to-point navigator for the G1 Onboard.
+
+    Per the 2026-05-14 spec change, the demo environment is fixed and obstacle-free, so the
+    full Nav2 stack (map_server / amcl / planner_server / controller_server / bt_navigator)
+    was removed. This package now ships a single goto_node that:
+      - subscribes to the UWB absolute pose from sensors/uwb_node,
+      - resolves a named_goal (or absolute pose) into a target,
+      - emits cmd_vel toward the target (P-controller) until within tolerance,
+      - reports nav state on /onboard/nav/state.
+
+    The cmd_vel still flows through safety_monitor before reaching motor_controller.
+  </description>
+  <maintainer email="park50260@gmail.com">박성용</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

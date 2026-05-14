@@ -1,0 +1,25 @@
+# navigation / goto_node — runtime parameters
+# TODO(REQ-37): tune gains and tolerances after first integration test.
+
+goto_node:
+  ros__parameters:
+    # Control loop
+    update_rate_hz: 10            # publish cmd_vel at this rate
+
+    # P-controller gains (linear: m/s per metre, angular: rad/s per radian)
+    kp_linear: 0.6                # TBD
+    kp_angular: 1.5               # TBD
+
+    # Saturation (must stay within safety_monitor velocity limits)
+    max_linear_speed: 0.5         # m/s
+    max_angular_speed: 0.8        # rad/s
+
+    # Tolerances for "goal reached"
+    position_tolerance: 0.15      # m
+    yaw_tolerance: 0.15           # rad (~ 8.6°)
+
+    # Watchdog
+    uwb_timeout_s: 1.0            # if UWB pose stale > this, halt and report FAILED
+
+    # Named-goal table file (relative to package share/<pkg>/config/)
+    named_goals_file: "named_goals.yaml"
