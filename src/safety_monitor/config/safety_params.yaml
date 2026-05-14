@@ -1,0 +1,24 @@
+# safety_monitor — runtime safety parameters
+# TODO(REQ-35): fill all limits from the G1 SDK joint specification and a kinematics review.
+
+safety_monitor:
+  ros__parameters:
+    # Loop control
+    loop_rate_hz: 100        # 10ms tick — well under the 200ms E-STOP budget
+
+    # E-STOP shared-memory channel (read by motor_controller)
+    estop_shm_name: "safety_flag"
+
+    # Velocity limits (cmd_vel.Twist)
+    max_linear_x: 0.8        # m/s   — TBD
+    max_linear_y: 0.5        # m/s   — TBD
+    max_angular_z: 1.0       # rad/s — TBD
+
+    # Proximity E-STOP
+    proximity_min_dist_m: 0.30        # TBD
+    proximity_point_count_thresh: 50  # TBD points within frustum
+
+    # Joint command bounds — TBD: populate per joint from G1 SDK
+    joint_limits:
+      # joint_name: [q_min, q_max, dq_max, tau_max]
+      placeholder_joint: [-1.57, 1.57, 2.0, 30.0]
