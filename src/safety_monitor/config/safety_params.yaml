@@ -4,19 +4,32 @@
 safety_monitor:
   ros__parameters:
     # Loop control
-    loop_rate_hz: 100        # 10ms tick — well under the 200ms E-STOP budget
+    loop_rate_hz: 100        # 10 ms tick — well under the 200 ms E-STOP budget
 
-    # E-STOP shared-memory channel (read by motor_controller)
+    # E-STOP shared-memory channel (read by motor_controller every control tick)
     estop_shm_name: "safety_flag"
 
-    # Velocity limits (cmd_vel.Twist)
+    # EstopFlag DDS heartbeat (Reliable topic — keeps PC subscriber alive
+    # even when the latched `active` flag has not changed). Matches the ICD
+    # entry "EstopFlag (Onboard→PC)" specifying 1 Hz heartbeat.
+    estop_heartbeat_hz: 1.0
+
+    # Velocity limits (cmd_vel.Twist on /onboard/navigation/cmd_vel)
     max_linear_x: 0.8        # m/s   — TBD
     max_linear_y: 0.5        # m/s   — TBD
     max_angular_z: 1.0       # rad/s — TBD
 
-    # Proximity E-STOP
-    proximity_min_dist_m: 0.30        # TBD
-    proximity_point_count_thresh: 50  # TBD points within frustum
+    # Proximity E-STOP via RealSense Depth only (LiDAR removed 2026-05-14).
+    proximity_min_dist_m: 0.30          # any depth pixel closer than this counts as "near"
+    proximity_depth_pixel_thresh: 50    # trigger E-STOP if more than this many "near" pixels in the frustum
+
+    # Comms watchdog — emit EstopFlag.REASON_COMMS_TIMEOUT if any subscribed
+    # command stream (cmd_vel, cmd/arm) is silent for longer than this window.
+    comms_timeout_s: 0.5
+
+    # Joint rate-of-change limit (per axis, rad/tick at loop_rate_hz).
+    # _check_rate_of_change uses this together with absolute joint limits.
+    joint_rate_of_change_limit: 0.20
 
     # Joint command bounds — TBD: populate per joint from G1 SDK
     joint_limits:
