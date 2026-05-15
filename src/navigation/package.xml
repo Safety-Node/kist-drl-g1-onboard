@@ -6,13 +6,14 @@
   <description>
     Minimal point-to-point navigator for the G1 Onboard.
 
-    Per the 2026-05-14 spec change, the demo environment is fixed and obstacle-free, so the
-    full Nav2 stack (map_server / amcl / planner_server / controller_server / bt_navigator)
-    was removed. This package now ships a single goto_node that:
+    Per the 2026-05-14 spec change, the demo environment is fixed and obstacle-free,
+    so the full Nav2 stack (map_server / amcl / planner_server / controller_server /
+    bt_navigator) was removed. This package now ships a single goto_node that:
       - subscribes to the UWB absolute pose from sensors/uwb_node,
-      - resolves a named_goal (or absolute pose) into a target,
+      - accepts target poses on /onboard/cmd/nav_goal (PoseStamped only — named-goal
+        resolution is owned by the PC side per the 2026-05-15 comm_bridge review),
       - emits cmd_vel toward the target (P-controller) until within tolerance,
-      - reports nav state on /onboard/nav/state.
+      - reports nav state on /onboard/nav/state (kist_drl_g1_msgs/NavState).
 
     The cmd_vel still flows through safety_monitor before reaching motor_controller.
   </description>
@@ -22,6 +23,7 @@
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>kist_drl_g1_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -43,7 +43,8 @@ class GotoNode(Node):
         self.get_logger().info('goto_node started (TBD)')
 
     # TODO(REQ-37): def _on_uwb_pose(self, msg) -> None  ← cache latest pose + timestamp
-    # TODO(REQ-30): def _on_nav_goal(self, msg) -> None  ← accept new target, transition to MOVING
+    # TODO(REQ-30): def _on_nav_goal(self, msg) -> None  ← accept new target (preempts
+    #                                                       current MOVING goal); transition to MOVING
     # TODO(REQ-37): def _step(self) -> None              ← P-controller tick, publish cmd_vel
     # TODO(REQ-37): def _at_goal(self) -> bool           ← position + yaw tolerance check
     # TODO(REQ-37): def _halt(self, reason: str) -> None ← publish zero Twist + NavState
