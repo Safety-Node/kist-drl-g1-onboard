@@ -3,20 +3,41 @@
 
 motor_controller:
   ros__parameters:
-    # Control loop
-    control_rate_hz: 20            # 50 ms tick
+    # ---------- Control loop ----------
+    control_rate_hz: 20            # 50 ms tick — matches VLA chunk step rate.
+                                   # G1 SDK rt/arm_sdk natively runs at 250 Hz; we publish
+                                   # at 20 Hz today (TODO(REQ-34, REQ-38): consider 250 Hz
+                                   # interpolation between VLA steps if motion looks jerky).
     busy_wait_fraction: 0.2        # busy-wait the last 20% of each tick for low jitter
 
-    # Ring buffer
+    # ---------- Ring buffer (action_queue) ----------
     ring_buffer_slots: 64
 
-    # VLA action-chunk crossfade (joint_buf only — velocity_buf passes through)
+    # ---------- VLA action-chunk crossfade (joint_buf only) ----------
+    # velocity_buf is unaffected — LocoClient handles walking inertia itself.
     chunk_size: 30
-    crossfade_threshold_g: 0.7     # SmolVLA §3.3 reference value (TBD)
+    crossfade_threshold_g: 0.7     # SmolVLA §3.3 "g" gating threshold — when |Δq| between
+                                   # consecutive chunks exceeds this, run crossfade overlap;
+                                   # below it, splice without blending. (TBD: confirm with
+                                   # VLA Provider integration; "g" stays as paper's notation.)
 
-    # G1 SDK
+    # ---------- rt/arm_sdk blending (upper-body joints) ----------
+    # G1 SDK's motor_cmd[29].q acts as a weight between G1's internal motion controller
+    # and our user command (formula: actual = motion * (1 - weight) + user * weight).
+    arm_default_weight: 1.0        # nominal value once a JointCmd stream is active
+    arm_weight_ramp_steps: 101     # linspace points for the start-up / hand-back ramp
+    arm_weight_ramp_dt: 0.02       # seconds per step → 101 × 20 ms ≈ 2 s total ramp
+
+    # ---------- LocoCommand routing ----------
+    # Map of LocoCommand.action enum → method to call on unitree_sdk2_python LocoClient.
+    # TODO(REQ-34): finalise after a hands-on session with the SDK; some methods may need
+    # extra param plumbing (e.g. SwitchGait).
+    estop_loco_action: "Damp"      # what to call when an E-STOP triggers
+                                   # (LocoClient.Damp() in current Unitree SDK naming)
+
+    # ---------- G1 SDK transport ----------
     network_interface: "eth0"      # TBD: confirm against onboard wiring
     domain_id: 0
 
-    # E-STOP shared-memory flag (written by safety_monitor)
+    # ---------- E-STOP shared-memory flag (written by safety_monitor) ----------
     estop_shm_name: "safety_flag"

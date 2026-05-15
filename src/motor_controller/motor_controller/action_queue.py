@@ -1,8 +1,13 @@
 """action_queue — lock-free Ring Buffer for safety-validated motor commands.
 
 Two independent FIFOs:
-  - velocity_buf  : LocoClient.Move(vx, vy, vyaw) commands  (hardware handles inertia)
-  - joint_buf     : rt/lowcmd joint commands               (VLA action chunks)
+  - velocity_buf  : LocoClient.Move(vx, vy, vyaw) commands           (hardware handles inertia)
+  - joint_buf     : rt/arm_sdk joint commands (upper-body, weight)   (VLA action chunks)
+
+ESTOP and LocoCommand bypass this queue:
+  - ESTOP        : motor_controller calls _execute_estop() immediately, which calls
+                   flush() on this queue to drop all pending commands atomically.
+  - LocoCommand  : routed straight to LocoClient method (no buffering for one-shot RPCs).
 
 TODO(REQ-34): implement push / pop / flush with a single-producer single-consumer SPSC pattern.
 TODO(REQ-34): expose buffer fill ratio for /onboard/motor/buf_state monitoring.

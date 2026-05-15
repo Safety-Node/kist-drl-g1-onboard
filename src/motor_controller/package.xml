@@ -4,10 +4,13 @@
   <name>motor_controller</name>
   <version>0.0.1</version>
   <description>
-    20Hz motor execution loop. Maintains a lock-free Ring Buffer and a QueueAggregate
-    (VLA action-chunk crossfade), executes VELOCITY/JOINT/ESTOP modes via the G1 SDK
-    (LocoClient + rt/lowcmd), and reacts to the safety_monitor shared-memory E-STOP flag.
-    Deployed as a systemd unit with CPUAffinity=1, Nice=-20.
+    20 Hz motor execution loop. Maintains a lock-free Ring Buffer plus a
+    QueueAggregate (VLA action-chunk crossfade), routes commands across the G1 SDK
+    control surfaces — LocoClient (walking + discrete FSM actions), rt/arm_sdk
+    (upper-body joints with weight blending), and rt/lowcmd (29-motor debug, optional)
+    — and reacts to the safety_monitor shared-memory E-STOP flag. Four execution
+    modes: VELOCITY_CMD, JOINT_CMD, LOCO_CMD, ESTOP. Deployed as a systemd unit
+    with CPUAffinity=1, Nice=-20.
   </description>
   <maintainer email="park50260@gmail.com">박성용</maintainer>
   <license>Apache-2.0</license>
@@ -16,6 +19,7 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>kist_drl_g1_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
