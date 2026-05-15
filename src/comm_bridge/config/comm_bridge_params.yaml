@@ -1,47 +1,81 @@
 # comm_bridge package — runtime parameters
 # TODO(REQ-32): finalise topic remap table once /bridge/ schema is locked.
+#
+# Routing convention (2026-05-15):
+#   - /bridge/cmd/arm  ↔ rt/arm_sdk path (upper-body, weight blending)
+#   - /bridge/cmd/low  ↔ rt/lowcmd path (29-motor debug — not exposed yet, YAGNI)
+#   - QoS column: per-relay choice. Sensor streams favour BEST_EFFORT (freshness wins),
+#     state reports and command channels favour RELIABLE (don't drop transitions).
 
 outbound_relay:
   ros__parameters:
-    # /onboard/<src>  ->  /bridge/<dst>
-    # Outbound QoS: BEST_EFFORT (sensor freshness wins)
+    # /onboard/<src>  →  /bridge/<dst>
     relays:
-      - src: "/onboard/sensors/color/image_raw/compressed"
-        dst: "/bridge/sensors/color/compressed"
+      # ---------- Sensor streams (BEST_EFFORT — freshness wins) ----------
+      - src:  "/onboard/sensors/color/image_raw/compressed"
+        dst:  "/bridge/sensors/color/compressed"
         type: "sensor_msgs/msg/CompressedImage"
-      - src: "/onboard/sensors/depth/image_raw"
-        dst: "/bridge/sensors/depth/image_raw"
+        qos:  "best_effort"
+      - src:  "/onboard/sensors/depth/image_raw"
+        dst:  "/bridge/sensors/depth/image_raw"
         type: "sensor_msgs/msg/Image"
-      - src: "/onboard/sensors/audio/pcm"
-        dst: "/bridge/sensors/audio_pcm"
+        qos:  "best_effort"
+      - src:  "/onboard/sensors/audio/pcm"
+        dst:  "/bridge/sensors/audio_pcm"
         type: "kist_drl_g1_msgs/msg/AudioPCM"
-      - src: "/onboard/sensors/joint_states"
-        dst: "/bridge/sensors/joint_states"
+        qos:  "best_effort"
+      - src:  "/onboard/sensors/joint_states"
+        dst:  "/bridge/sensors/joint_states"
         type: "sensor_msgs/msg/JointState"
-      - src: "/onboard/sensors/uwb/pose"
-        dst: "/bridge/sensors/uwb_pose"
-        type: "geometry_msgs/msg/PoseStamped"  # UWB absolute pose (REQ-37) — for PC monitoring
-      - src: "/onboard/nav/state"
-        dst: "/bridge/nav/state"
-        type: "std_msgs/msg/String"          # TBD: replace with proper status type (REQ-32)
-      - src: "/onboard/motor/buf_state"
-        dst: "/bridge/motor/buf_state"
-        type: "std_msgs/msg/String"          # TBD: replace with proper status type (REQ-32)
-      - src: "/onboard/audio/speaker_state"
-        dst: "/bridge/audio/speaker_state"
-        type: "std_msgs/msg/String"
+        qos:  "best_effort"
+      - src:  "/onboard/sensors/imu/data"
+        dst:  "/bridge/sensors/imu"
+        type: "sensor_msgs/msg/Imu"
+        qos:  "best_effort"
+      - src:  "/onboard/sensors/uwb/pose"
+        dst:  "/bridge/sensors/uwb_pose"
+        type: "geometry_msgs/msg/PoseStamped"
+        qos:  "best_effort"
+
+      # ---------- State reports (RELIABLE — don't drop transitions) ----------
+      - src:  "/onboard/nav/state"
+        dst:  "/bridge/nav/state"
+        type: "kist_drl_g1_msgs/msg/NavState"
+        qos:  "reliable"
+      - src:  "/onboard/motor/buf_state"
+        dst:  "/bridge/motor/buf_state"
+        type: "kist_drl_g1_msgs/msg/BufState"
+        qos:  "reliable"
+      - src:  "/onboard/audio/speaker_state"
+        dst:  "/bridge/audio/speaker_state"
+        type: "kist_drl_g1_msgs/msg/SpeakerState"
+        qos:  "reliable"
+      - src:  "/onboard/safety/estop"
+        dst:  "/bridge/safety/estop"
+        type: "kist_drl_g1_msgs/msg/EstopFlag"
+        qos:  "reliable"
 
 inbound_relay:
   ros__parameters:
-    # /bridge/<src>  ->  /onboard/<dst>
-    # Inbound QoS: RELIABLE (don't drop commands)
+    # /bridge/<src>  →  /onboard/<dst>
+    # All command channels are RELIABLE — control messages must not be dropped.
     relays:
-      - src: "/bridge/cmd/joint"
-        dst: "/onboard/cmd/joint"
-        type: "sensor_msgs/msg/JointState"   # TBD(REQ-34): dedicated JointCmd type later
-      - src: "/bridge/cmd/nav_goal"
-        dst: "/onboard/cmd/nav_goal"
+      - src:  "/bridge/cmd/arm"
+        dst:  "/onboard/cmd/arm"
+        type: "kist_drl_g1_msgs/msg/JointCmd"
+        qos:  "reliable"
+      - src:  "/bridge/cmd/loco"
+        dst:  "/onboard/cmd/loco"
+        type: "kist_drl_g1_msgs/msg/LocoCommand"
+        qos:  "reliable"
+      - src:  "/bridge/cmd/nav_goal"
+        dst:  "/onboard/cmd/nav_goal"
         type: "geometry_msgs/msg/PoseStamped"
-      - src: "/bridge/cmd/audio_out"
-        dst: "/onboard/audio/playback"
+        qos:  "reliable"
+      - src:  "/bridge/cmd/audio_out"
+        dst:  "/onboard/audio/playback"
         type: "kist_drl_g1_msgs/msg/AudioPCM"
+        qos:  "reliable"
+
+      # NOTE: /bridge/cmd/low (rt/lowcmd debug path) not exposed yet (YAGNI).
+      #       Add when full-body manual / debug override is required.
