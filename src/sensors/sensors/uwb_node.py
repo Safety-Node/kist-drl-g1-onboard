@@ -1,7 +1,9 @@
-"""uwb_node — UWB beacon receiver / absolute pose publisher.
+"""
+UWB beacon receiver / absolute pose publisher.
 
-Replaces SLAM-based localisation (REQ-37). Reads UWB tag position from a vendor module
-(serial or UDP — TBD) and publishes the robot's absolute pose in the 'map' frame.
+Replaces SLAM-based localisation (REQ-37). Reads UWB tag position from a
+vendor module (serial or UDP -- TBD) and publishes the robot's absolute
+pose in the 'map' frame.
 
 TODO(REQ-37): pick UWB vendor SDK / wire protocol (Nooploop, Decawave, Sewio, …).
 TODO(REQ-37): subscribe to UWB tag stream, parse anchor distances, run trilateration if

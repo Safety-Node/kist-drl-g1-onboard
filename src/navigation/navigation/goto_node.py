@@ -1,27 +1,28 @@
-"""goto_node — point-to-point navigator using UWB absolute pose.
+"""
+Point-to-point navigator using UWB absolute pose.
 
 Per the 2026-05-15 comm_bridge review (decision 5a), named goals
-(e.g. "refrigerator", "sink") are resolved to absolute coordinates on the
-PC side (UnitreeG1 Provider / Move Connector) before being published.
-goto_node only accepts PoseStamped goals — keeping NX dumb and PC smart
-simplifies updates to the demo target list (only PC has to redeploy when
-the survey changes).
+(e.g. "refrigerator", "sink") are resolved to absolute coordinates on
+the PC side (UnitreeG1 Provider / Move Connector) before being published.
+goto_node only accepts PoseStamped goals -- keeping NX dumb and PC smart
+simplifies updates to the demo target list (only PC has to redeploy
+when the survey changes).
 
 The demo environment is fixed and obstacle-free, so a simple P-controller
 is sufficient:
 
     while not at(goal):
         err = goal - uwb_pose
-        cmd_vel = clip(Kp * err, ±v_max)
-        publish cmd_vel  # → safety_monitor → motor_controller
+        cmd_vel = clip(Kp * err, +/- v_max)
+        publish cmd_vel  # -> safety_monitor -> motor_controller
 
 Inputs:
-  /onboard/sensors/uwb/pose   (geometry_msgs/PoseStamped)        — current absolute pose
-  /onboard/cmd/nav_goal       (geometry_msgs/PoseStamped)        — target pose in map frame
+- /onboard/sensors/uwb/pose   (PoseStamped)  current absolute pose
+- /onboard/cmd/nav_goal       (PoseStamped)  target pose in map frame
 
 Outputs:
-  /onboard/navigation/cmd_vel (geometry_msgs/Twist)              — to safety_monitor
-  /onboard/nav/state          (kist_drl_g1_msgs/NavState)        — IDLE/MOVING/REACHED/FAILED/CANCELED
+- /onboard/navigation/cmd_vel (Twist)        to safety_monitor
+- /onboard/nav/state          (NavState)     IDLE/MOVING/REACHED/FAILED/CANCELED
 """
 import rclpy
 from rclpy.node import Node
@@ -42,12 +43,12 @@ class GotoNode(Node):
 
         self.get_logger().info('goto_node started (TBD)')
 
-    # TODO(REQ-37): def _on_uwb_pose(self, msg) -> None  ← cache latest pose + timestamp
-    # TODO(REQ-30): def _on_nav_goal(self, msg) -> None  ← accept new target (preempts
-    #                                                       current MOVING goal); transition to MOVING
-    # TODO(REQ-37): def _step(self) -> None              ← P-controller tick, publish cmd_vel
-    # TODO(REQ-37): def _at_goal(self) -> bool           ← position + yaw tolerance check
-    # TODO(REQ-37): def _halt(self, reason: str) -> None ← publish zero Twist + NavState
+    # TODO(REQ-37): def _on_uwb_pose(self, msg)  -- cache latest pose + timestamp
+    # TODO(REQ-30): def _on_nav_goal(self, msg)  -- accept new target (preempts current
+    #               MOVING goal); transition to MOVING
+    # TODO(REQ-37): def _step(self)              -- P-controller tick, publish cmd_vel
+    # TODO(REQ-37): def _at_goal(self) -> bool   -- position + yaw tolerance check
+    # TODO(REQ-37): def _halt(self, reason)      -- publish zero Twist + NavState
 
 
 def main(args=None) -> None:

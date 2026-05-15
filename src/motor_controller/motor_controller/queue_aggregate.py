@@ -1,4 +1,5 @@
-"""queue_aggregate — VLA action-chunk crossfade for joint_buf.
+"""
+VLA action-chunk crossfade for joint_buf.
 
 When a new action chunk arrives while the previous chunk still has 'overlap' actions
 remaining, blend them linearly so the joint trajectory stays smooth.
@@ -18,15 +19,14 @@ from typing import List
 
 def crossfade(old_tail: List[List[float]],
               new_chunk: List[List[float]]) -> List[List[float]]:
-    """Return the blended sequence to write into joint_buf.
+    """
+    Return the blended sequence to write into joint_buf.
 
-    Args:
-        old_tail:  remaining joint vectors from the previous chunk (length = overlap)
-        new_chunk: incoming chunk (length >= overlap)
-
-    Returns:
-        Blended list of joint vectors. The first len(old_tail) entries are weighted;
-        the rest are copied from new_chunk unchanged.
+    `old_tail` is the remaining joint vectors from the previous chunk
+    (length = overlap). `new_chunk` is the incoming chunk
+    (length >= overlap). The first len(old_tail) entries of the result
+    are linearly weighted; the remainder is copied from `new_chunk`
+    unchanged.
     """
     overlap = len(old_tail)
     if overlap == 0:

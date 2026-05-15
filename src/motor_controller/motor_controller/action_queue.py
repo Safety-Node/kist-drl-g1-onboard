@@ -1,4 +1,5 @@
-"""action_queue — lock-free Ring Buffer for safety-validated motor commands.
+"""
+Lock-free Ring Buffer for safety-validated motor commands.
 
 Two independent FIFOs:
   - velocity_buf  : LocoClient.Move(vx, vy, vyaw) commands           (hardware handles inertia)
@@ -14,7 +15,7 @@ TODO(REQ-34): expose buffer fill ratio for /onboard/motor/buf_state monitoring.
 """
 from collections import deque
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import auto, Enum
 from typing import Any, Deque
 
 

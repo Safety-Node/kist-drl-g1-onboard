@@ -1,32 +1,32 @@
-"""sensors.launch.py — launches all onboard sensor nodes.
+"""
+Launches all onboard sensor nodes.
 
 Composition:
-  - camera_node       : realsense2_camera (external C++ driver, IncludeLaunchDescription) [REQ-42]
-  - mic_node          : sensors.mic_node                                                  [REQ-42, REQ-27]
-  - speaker_node      : sensors.speaker_node                                              [REQ-29]
-  - joint_state_node  : sensors.joint_state_node — publishes JointState + Imu             [REQ-42]
-  - uwb_node          : sensors.uwb_node                                                  [REQ-37]
+- camera_node       realsense2_camera (external C++ driver via IncludeLaunchDescription)  [REQ-42]
+- mic_node          sensors.mic_node                                  [REQ-42, REQ-27]
+- speaker_node      sensors.speaker_node                              [REQ-29]
+- joint_state_node  sensors.joint_state_node (publishes JointState + Imu)  [REQ-42]
+- uwb_node          sensors.uwb_node                                  [REQ-37]
 
 Removed (per spec change 2026-05-14):
-  - lidar_node : Livox MID-360 dropped in favour of UWB absolute localisation.
+- lidar_node: Livox MID-360 dropped in favour of UWB absolute localisation.
 
-Environment variables:
-  SENSORS_REQUIRE_CAMERA=1   Hard-fail the launch if realsense2_camera is not
-                             installed. Default (unset / "0") logs a warning
-                             and continues without the camera so dev builds
-                             without the driver still work.
+Environment variable SENSORS_REQUIRE_CAMERA=1 hard-fails the launch if
+realsense2_camera is not installed. Default (unset / "0") logs a warning
+and continues without the camera so dev builds without the driver still
+work.
 
-Notes:
-  - Camera parameters (resolution / fps) are read from sensors_params.yaml
-    so the YAML stays the single source of truth and the launch file does
-    not duplicate those values.
+Camera parameters (resolution / fps) are read from sensors_params.yaml so
+the YAML stays the single source of truth and the launch file does not
+duplicate those values.
 """
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, LogInfo
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-import os
 import yaml
 
 

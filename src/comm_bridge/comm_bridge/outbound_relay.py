@@ -1,4 +1,5 @@
-"""outbound_relay — forwards /onboard/* topics to /bridge/* with per-relay QoS.
+"""
+Forwards /onboard/* topics to /bridge/* with per-relay QoS.
 
 Reads a relay table from comm_bridge_params.yaml. Each entry has src, dst, type,
 and qos ("best_effort" | "reliable"). Sensor streams use BEST_EFFORT (freshness

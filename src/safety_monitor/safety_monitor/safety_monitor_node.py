@@ -1,37 +1,38 @@
-"""safety_monitor_node — validates all motion commands and emits E-STOP within 200 ms.
+"""
+Validates all motion commands and emits E-STOP within 200 ms (REQ-35).
 
 Subscriptions:
-  /onboard/navigation/cmd_vel        (geometry_msgs/Twist)        [navigation/goto_node]
-  /onboard/cmd/arm                   (kist_drl_g1_msgs/JointCmd)  [comm_bridge inbound relay, rt/arm_sdk path]
-  /onboard/sensors/depth/image_raw   (sensor_msgs/Image)          [sensors/camera — RealSense Depth]
-  /onboard/sensors/joint_states      (sensor_msgs/JointState)     [sensors/joint_state_node]
+- /onboard/navigation/cmd_vel        (Twist)        navigation/goto_node
+- /onboard/cmd/arm                   (JointCmd)     comm_bridge inbound (rt/arm_sdk)
+- /onboard/sensors/depth/image_raw   (Image)        sensors/camera RealSense Depth
+- /onboard/sensors/joint_states      (JointState)   sensors/joint_state_node
 
 Publications:
-  /onboard/safety/validated_twist    (geometry_msgs/Twist)        [→ motor_controller velocity_buf]
-  /onboard/safety/validated_joint    (kist_drl_g1_msgs/JointCmd)  [→ motor_controller joint_buf]
-  /onboard/safety/estop              (kist_drl_g1_msgs/EstopFlag) [structured DDS mirror; also broadcast at heartbeat]
+- /onboard/safety/validated_twist    (Twist)        -> motor_controller velocity_buf
+- /onboard/safety/validated_joint    (JointCmd)     -> motor_controller joint_buf
+- /onboard/safety/estop              (EstopFlag)    structured DDS + heartbeat
 
 Side channel:
-  POSIX shared-memory byte at `estop_shm_name` ("safety_flag") — motor_controller
-  polls this every control tick (~250 Hz). The DDS topic is the PC-facing
-  structured mirror; this byte is the zero-latency path.
+  POSIX shared-memory byte at estop_shm_name ("safety_flag") polled every
+  motor_controller tick (~250 Hz). DDS EstopFlag is the PC-facing structured
+  mirror; this byte is the zero-latency action path.
 
 Validation checks (REQ-35):
-  - Joint limit       (per-joint q_min/q_max, |dq| ≤ dq_max, |τ| ≤ tau_max)
-  - Velocity limit    (|linear.x|, |linear.y|, |angular.z| ≤ max_*)
-  - Proximity         (RealSense Depth — count pixels closer than proximity_min_dist_m)
-  - Self-collision    (placeholder; FK + coarse collision model)
-  - Rate of change    (per-joint Δq per tick ≤ joint_rate_of_change_limit)
-  - Comms timeout     (no fresh cmd in comms_timeout_s → EstopFlag.REASON_COMMS_TIMEOUT)
+- Joint limit      (per-joint q_min/q_max, |dq| <= dq_max, |tau| <= tau_max)
+- Velocity limit   (|linear.x|, |linear.y|, |angular.z| <= max_*)
+- Proximity        (Depth pixels closer than proximity_min_dist_m)
+- Self-collision   (placeholder; FK + coarse collision model)
+- Rate of change   (per-joint dq per tick <= joint_rate_of_change_limit)
+- Comms timeout    (no fresh cmd in comms_timeout_s -> REASON_COMMS_TIMEOUT)
 
 Note (2026-05-14 spec change):
-  LiDAR PointCloud was removed. Proximity E-STOP uses Depth only; FOV/range
-  reduced — re-evaluate before any non-demo deployment.
+  LiDAR PointCloud removed. Proximity E-STOP uses Depth only; FOV/range
+  reduced -- re-evaluate before any non-demo deployment.
 
 Real-time strategy (per spec):
-  - gc.disable() before entering the main loop          (TODO(REQ-35))
-  - shared-memory flag write < 0.01 ms                  (TODO(REQ-35))
-  - systemd CPUAffinity=0, Nice=-20                     (see systemd/safety_monitor.service)
+- gc.disable() before entering the main loop          (TODO(REQ-35))
+- shared-memory flag write < 0.01 ms                  (TODO(REQ-35))
+- systemd CPUAffinity=0, Nice=-20  (see systemd/safety_monitor.service)
 """
 import rclpy
 from rclpy.node import Node
@@ -61,12 +62,12 @@ class SafetyMonitorNode(Node):
 
     # TODO(REQ-35): def _check_joint_limits(self, cmd) -> tuple[bool, str]
     # TODO(REQ-35): def _check_velocity_limits(self, twist) -> tuple[bool, str]
-    # TODO(REQ-35): def _check_proximity(self, depth_image) -> tuple[bool, str]   # RealSense Depth only
+    # TODO(REQ-35): def _check_proximity(self, depth_image) -> tuple[bool, str]   # Depth only
     # TODO(REQ-35): def _check_self_collision(self, target_q, current_q) -> tuple[bool, str]
     # TODO(REQ-35): def _check_rate_of_change(self, target_q, current_q) -> tuple[bool, str]
     # TODO(REQ-35): def _trigger_estop(self, reason: int, detail: str) -> None
-    #               # reason uses kist_drl_g1_msgs.msg.EstopFlag.REASON_* constants;
-    #               # sets the SHM byte AND publishes EstopFlag on DDS.
+    #               reason uses kist_drl_g1_msgs.msg.EstopFlag.REASON_* constants;
+    #               sets the SHM byte AND publishes EstopFlag on DDS.
 
 
 def main(args=None) -> None:

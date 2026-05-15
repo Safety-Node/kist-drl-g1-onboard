@@ -1,4 +1,5 @@
-"""inbound_relay — forwards /bridge/* commands to /onboard/* with RELIABLE QoS.
+"""
+Forwards /bridge/* commands to /onboard/* with RELIABLE QoS.
 
 All command channels are RELIABLE — control messages must not be dropped.
 The per-relay yaml schema still carries `qos` for symmetry with the outbound
