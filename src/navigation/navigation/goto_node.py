@@ -1,7 +1,14 @@
 """goto_node — point-to-point navigator using UWB absolute pose.
 
-Replaces the SLAM/Nav2 stack (REQ-37). The demo environment is fixed and obstacle-free,
-so a simple P-controller is sufficient:
+Per the 2026-05-15 comm_bridge review (decision 5a), named goals
+(e.g. "refrigerator", "sink") are resolved to absolute coordinates on the
+PC side (UnitreeG1 Provider / Move Connector) before being published.
+goto_node only accepts PoseStamped goals — keeping NX dumb and PC smart
+simplifies updates to the demo target list (only PC has to redeploy when
+the survey changes).
+
+The demo environment is fixed and obstacle-free, so a simple P-controller
+is sufficient:
 
     while not at(goal):
         err = goal - uwb_pose
@@ -10,11 +17,11 @@ so a simple P-controller is sufficient:
 
 Inputs:
   /onboard/sensors/uwb/pose   (geometry_msgs/PoseStamped)        — current absolute pose
-  /onboard/cmd/nav_goal       (std_msgs/String OR PoseStamped)   — named goal or absolute pose
+  /onboard/cmd/nav_goal       (geometry_msgs/PoseStamped)        — target pose in map frame
 
 Outputs:
   /onboard/navigation/cmd_vel (geometry_msgs/Twist)              — to safety_monitor
-  /onboard/nav/state          (std_msgs/String)                  — IDLE / MOVING / REACHED / FAILED
+  /onboard/nav/state          (kist_drl_g1_msgs/NavState)        — IDLE/MOVING/REACHED/FAILED/CANCELED
 """
 import rclpy
 from rclpy.node import Node
@@ -26,21 +33,20 @@ class GotoNode(Node):
 
         # TODO(REQ-37): declare params (update_rate_hz, kp_linear, kp_angular,
         #               max_linear_speed, max_angular_speed, position_tolerance,
-        #               yaw_tolerance, uwb_timeout_s, named_goals_file)
-        # TODO(REQ-37): load named_goals.yaml from share/navigation/config/
-        # TODO(REQ-37): subscribe /onboard/sensors/uwb/pose (PoseStamped)
-        # TODO(REQ-30): subscribe /onboard/cmd/nav_goal (String for named goal, or PoseStamped)
-        # TODO(REQ-37): publisher /onboard/navigation/cmd_vel (Twist)
-        # TODO(REQ-30): publisher /onboard/nav/state (String) — IDLE / MOVING / REACHED / FAILED
+        #               yaw_tolerance, uwb_timeout_s)
+        # TODO(REQ-37): subscribe /onboard/sensors/uwb/pose (geometry_msgs/PoseStamped)
+        # TODO(REQ-30, REQ-37): subscribe /onboard/cmd/nav_goal (geometry_msgs/PoseStamped)
+        # TODO(REQ-37): publisher /onboard/navigation/cmd_vel (geometry_msgs/Twist)
+        # TODO(REQ-30): publisher /onboard/nav/state (kist_drl_g1_msgs/NavState)
         # TODO(REQ-37): timer at update_rate_hz running the P-controller step
 
         self.get_logger().info('goto_node started (TBD)')
 
     # TODO(REQ-37): def _on_uwb_pose(self, msg) -> None  ← cache latest pose + timestamp
-    # TODO(REQ-30): def _on_nav_goal(self, msg) -> None  ← resolve named goal, transition to MOVING
+    # TODO(REQ-30): def _on_nav_goal(self, msg) -> None  ← accept new target, transition to MOVING
     # TODO(REQ-37): def _step(self) -> None              ← P-controller tick, publish cmd_vel
     # TODO(REQ-37): def _at_goal(self) -> bool           ← position + yaw tolerance check
-    # TODO(REQ-37): def _halt(self, reason: str) -> None ← publish zero Twist + state
+    # TODO(REQ-37): def _halt(self, reason: str) -> None ← publish zero Twist + NavState
 
 
 def main(args=None) -> None:

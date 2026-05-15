@@ -1,5 +1,10 @@
 # navigation / goto_node — runtime parameters
 # TODO(REQ-37): tune gains and tolerances after first integration test.
+#
+# Note (2026-05-15 comm_bridge review, decision 5a): named-goal resolution
+# is owned by the PC side. goto_node accepts only PoseStamped, so there is
+# no named_goals_file param here — the previous `named_goals.yaml` in this
+# package was deleted accordingly.
 
 goto_node:
   ros__parameters:
@@ -20,6 +25,3 @@ goto_node:
 
     # Watchdog
     uwb_timeout_s: 1.0            # if UWB pose stale > this, halt and report FAILED
-
-    # Named-goal table file (relative to package share/<pkg>/config/)
-    named_goals_file: "named_goals.yaml"
