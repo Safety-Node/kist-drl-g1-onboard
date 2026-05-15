@@ -10,9 +10,23 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
-# TODO(infra): add more interface files as packages mature
+# Interface files. Order does not matter — rosidl resolves inter-message references
+# automatically (e.g. ActionChunk depends on JointCmd).
+#
+# Design note (2026-05-15): ValidatedCmd was removed in favour of two separate
+# topics — geometry_msgs/Twist for validated walking commands and JointCmd for
+# validated upper-body joint commands. The G1 SDK runs LocoClient (lower body
+# walking) and rt/lowcmd (joints) as independent controllers, so emitting them
+# on independent topics matches the hardware semantics.
 set(msg_files
   "msg/AudioPCM.msg"
+  "msg/JointCmd.msg"
+  "msg/LocoCommand.msg"
+  "msg/ActionChunk.msg"
+  "msg/NavState.msg"
+  "msg/BufState.msg"
+  "msg/SpeakerState.msg"
+  "msg/EstopFlag.msg"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}
