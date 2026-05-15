@@ -1,27 +1,33 @@
 # sensors package — runtime parameters
 # TODO(REQ-42): fill real values once HW driver wrappers are integrated.
 
-audio_node:
+# Microphone capture (Onboard → STT). Fixed 16 kHz / 16-bit / mono pipeline.
+mic_node:
   ros__parameters:
-    # ALSA capture / playback device names (verify on Orin NX)
     capture_device: "default"     # TBD: e.g. "hw:CARD=Mic,DEV=0"
-    playback_device: "default"    # TBD: e.g. "hw:CARD=Speaker,DEV=0"
-    sample_rate: 16000
-    channels: 1
-    chunk_ms: 20                  # publish 20 ms PCM chunks
+    sample_rate: 16000            # FIXED — STT expects 16 k; do not change without updating speaker_node + TTS Provider
+    channels: 1                   # mono — the 4-mic array is mixed down by ALSA
+    chunk_ms: 20                  # publish 20 ms PCM chunks (≈640 byte payload)
 
+# Speaker playback (TTS → Onboard). TTS Provider must resample to 16 k before publishing.
+speaker_node:
+  ros__parameters:
+    playback_device: "default"    # TBD: e.g. "hw:CARD=Speaker,DEV=0"
+    sample_rate: 16000            # FIXED — must match mic_node and AudioPCM contract
+    channels: 1                   # mono
+
+# G1 SDK lowstate fan-out — joint encoders + body IMU on the same channel.
 joint_state_node:
   ros__parameters:
-    # G1 SDK low-state subscription
     publish_rate_hz: 100
     network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface name
     domain_id: 0                  # TBD: align with comm_bridge DDS domain
+    imu_frame_id: "base_link"     # frame_id stamped on sensor_msgs/Imu
 
+# RealSense D435i — these values are READ by sensors.launch.py and passed
+# into the realsense2_camera launch as launch_arguments. Single source of truth.
 camera_node:
   ros__parameters:
-    # passed through to realsense2_camera; see its docs for full schema.
-    # Depth is consumed by safety_monitor (proximity E-STOP).
-    # Color/Depth are also forwarded to PC via comm_bridge for VLA inference.
     enable_color: true
     enable_depth: true
     color_width: 1280
@@ -31,13 +37,14 @@ camera_node:
     depth_height: 720
     depth_fps: 30
 
+# UWB absolute pose source (REQ-37). Vendor TBD — uwb_node uses the Strategy
+# pattern (UwbTransport ABC) so swapping vendors is a class swap.
 uwb_node:
   ros__parameters:
-    # Vendor / transport — TBD(REQ-37): finalise once UWB module is picked.
-    transport: "serial"            # "serial" | "udp"
-    serial_port: "/dev/ttyUSB0"    # TBD
+    transport: "stub"              # "stub" | "serial" | "udp" — stub returns zero pose
+    serial_port: "/dev/ttyUSB0"    # TBD (used when transport=="serial")
     serial_baud: 115200            # TBD
-    udp_listen_port: 50000         # used if transport=="udp"
+    udp_listen_port: 50000         # used when transport=="udp"
     publish_rate_hz: 20            # UWB tag update rate (TBD)
 
     # Frame conventions
