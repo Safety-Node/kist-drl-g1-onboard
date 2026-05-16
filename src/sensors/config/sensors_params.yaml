@@ -1,49 +1,31 @@
-# sensors package — runtime parameters
+# sensors package — runtime parameters.
 # TODO(REQ-42): fill real values once HW driver wrappers are integrated.
 
-# Microphone capture (Onboard → STT). Fixed 16 kHz / 16-bit / mono pipeline.
+# [TASK-31] mic capture (Onboard → STT). LOCKED 16 kHz / 16-bit / mono pipeline.
 mic_node:
   ros__parameters:
     capture_device: "default"     # TBD: e.g. "hw:CARD=Mic,DEV=0"
-    sample_rate: 16000            # FIXED — STT expects 16 k; do not change without updating speaker_node + TTS Provider
-    channels: 1                   # mono — ALSA mixes the 4-mic array down at capture.
-                                  # Trade-off (decided 2026-05-16, sensors review #2):
-                                  # gives up beamforming / DOA noise suppression in
-                                  # exchange for a single stream STT (CLOVA) accepts
-                                  # unchanged. The G1 array does some onboard AEC
-                                  # already and the demo room is acoustically simple.
-                                  # See mic_node.py docstring for the upgrade path.
-    chunk_ms: 20                  # publish 20 ms PCM chunks (≈640 byte payload)
+    sample_rate: 16000            # LOCKED — AudioPCM.msg pipeline format
+    channels: 1                   # mono — intentional G1 4-mic mix-down (see TASK-31)
+    chunk_ms: 20                  # 20 ms chunk → ≈640 byte payload
 
-# Speaker playback (TTS → Onboard). TTS Provider must resample to 16 k before publishing.
+# [TASK-31] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
 speaker_node:
   ros__parameters:
     playback_device: "default"    # TBD: e.g. "hw:CARD=Speaker,DEV=0"
-    sample_rate: 16000            # FIXED — must match mic_node and AudioPCM contract
+    sample_rate: 16000            # LOCKED
     channels: 1                   # mono
-    max_queue_depth: 50           # cap for the internal playback queue. Must stay
-                                  # < 256 because SpeakerState.queue_depth is uint8.
-                                  # Overflow policy: drop OLDEST (TTS favours
-                                  # recency -- a stale system prompt mid-playback
-                                  # is worse than the latest message landing on time).
+    max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
-# G1 SDK lowstate fan-out — joint encoders + body IMU on the same channel.
+# [TASK-32] G1 SDK lowstate fan-out — joint encoders + body IMU on same channel.
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
-    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface name
-    domain_id: 0                  # TBD: verify G1 SDK DDS domain isolation at first
-                                  # integration. unitree_sdk2_python opens its own
-                                  # DDS participant; if it shares the ROS 2 domain
-                                  # the raw G1 channels (rt/lf/lowstate, rt/lowcmd,
-                                  # rt/arm_sdk) leak into `ros2 topic list`. Pin
-                                  # this to the SDK's own domain and leave the ROS 2
-                                  # nodes on a separate one. See joint_state_node.py
-                                  # TODO for the verification recipe.
-    imu_frame_id: "base_link"     # frame_id stamped on sensor_msgs/Imu
+    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
+    domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
+    imu_frame_id: "base_link"
 
-# RealSense D435i — these values are READ by sensors.launch.py and passed
-# into the realsense2_camera launch as launch_arguments. Single source of truth.
+# [TASK-32] RealSense D435i — read by sensors.launch.py and passed as launch_arguments.
 camera_node:
   ros__parameters:
     enable_color: true
@@ -55,28 +37,21 @@ camera_node:
     depth_height: 720
     depth_fps: 30
 
-# UWB absolute pose source (REQ-37). Vendor TBD — uwb_node uses the Strategy
-# pattern (UwbTransport ABC) so swapping vendors is a class swap.
+# [TASK-30] UWB absolute pose (REQ-37). Vendor TBD — Strategy pattern UwbTransport ABC.
 uwb_node:
   ros__parameters:
-    transport: "stub"              # "stub" | "serial" | "udp" — stub returns zero pose
-    serial_port: "/dev/ttyUSB0"    # TBD (used when transport=="serial")
-    serial_baud: 115200            # TBD
-    udp_listen_port: 50000         # used when transport=="udp"
-    publish_rate_hz: 20            # UWB tag update rate (TBD)
+    transport: "stub"             # "stub" | "serial" | "udp"  (stub returns zero pose)
+    serial_port: "/dev/ttyUSB0"   # TBD (when transport=="serial")
+    serial_baud: 115200           # TBD
+    udp_listen_port: 50000        # when transport=="udp"
+    publish_rate_hz: 20
 
     # Frame conventions
-    frame_id: "map"                # UWB returns absolute coordinates in 'map' frame
-    child_frame_id: "base_link"    # reserved -- no TF broadcast today (2026-05-16:
-                                   # uwb_node publishes PoseStamped only; see
-                                   # uwb_node.py module docstring). Kept for the
-                                   # day a fusion node (UWB + IMU) is added.
+    frame_id: "map"
+    child_frame_id: "base_link"   # reserved — no TF broadcast (see TASK-30)
 
-    # Anchor calibration — TBD: populate after site survey.
-    # Trilateration needs >= 3 non-collinear anchors. The placeholder below is
-    # a dev-only stub paired with transport: "stub" (returns zero pose). Real
-    # deployment must replace this with the surveyed map-frame coordinates of
-    # every anchor in the demo room.
+    # Anchor calibration — TBD: site survey.
+    # Trilateration needs ≥ 3 non-collinear anchors. Placeholder paired with transport: "stub".
     anchors:
-      # anchor_id: [x, y, z]  in metres, map frame
+      # anchor_id: [x, y, z]  metres, map frame
       placeholder_anchor_0: [0.0, 0.0, 2.5]

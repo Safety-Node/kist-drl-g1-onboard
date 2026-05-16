@@ -1,28 +1,16 @@
 """
-Launches all onboard sensor nodes.
+Launches onboard sensor nodes.
 
 Composition:
-- camera_node       realsense2_camera (external C++ driver via IncludeLaunchDescription)  [REQ-42]
-- mic_node          sensors.mic_node                                  [REQ-42, REQ-27]
-- speaker_node      sensors.speaker_node                              [REQ-29]
-- joint_state_node  sensors.joint_state_node (publishes JointState + Imu)  [REQ-42]
-- uwb_node          sensors.uwb_node                                  [REQ-37]
+- camera_node       realsense2_camera (external C++ driver)  [TASK-32]
+- mic_node          sensors.mic_node                          [TASK-31]
+- speaker_node      sensors.speaker_node                      [TASK-31]
+- joint_state_node  sensors.joint_state_node                  [TASK-32]
+- uwb_node          sensors.uwb_node                          [TASK-30]
 
-Removed (per spec change 2026-05-14):
-- lidar_node: Livox MID-360 dropped in favour of UWB absolute localisation.
-
-Environment variables:
-  SENSORS_REQUIRE_CAMERA=1       hard-fail the launch if realsense2_camera is
-                                 not installed (default: warn and continue).
-  SENSORS_REQUIRE_VALID_PARAMS=1 hard-fail the launch if sensors_params.yaml
-                                 cannot be parsed (default: warn and fall back
-                                 to camera defaults). Recommended for the
-                                 deployed NX so a malformed yaml doesn't
-                                 silently boot the wrong profile.
-
-Camera parameters (resolution / fps) are read from sensors_params.yaml so
-the YAML stays the single source of truth and the launch file does not
-duplicate those values.
+Env vars:
+  SENSORS_REQUIRE_CAMERA=1       hard-fail if realsense2_camera missing.
+  SENSORS_REQUIRE_VALID_PARAMS=1 hard-fail if sensors_params.yaml invalid.
 """
 import os
 
@@ -108,18 +96,7 @@ def generate_launch_description():
             cam.get('depth_fps', 30),
         )
 
-        # Resulting topic names (verify at first integration with `ros2 topic list`):
-        #   /onboard/sensors/color/image_raw/compressed
-        #   /onboard/sensors/depth/image_raw
-        # comm_bridge_params.yaml expects exactly these names. realsense2_camera
-        # builds topics as "{camera_namespace}/{camera_name}/<topic>" -- the
-        # earlier setting camera_name='onboard_camera' produced an extra
-        # "/onboard_camera/" segment that didn't match the relay table, so we
-        # drop the per-camera name and keep the prefix flat under
-        # /onboard/sensors. We are single-camera, so the disambiguator brings
-        # no value here.
-        # TODO(REQ-42): if a second camera is ever added, give each a non-empty
-        #               camera_name and update comm_bridge_params.yaml accordingly.
+        # Topics: /onboard/sensors/{color,depth}/...  (see TASK-32 for camera_name='' rationale)
         external_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(realsense_launch_file),
             launch_arguments={
@@ -129,7 +106,7 @@ def generate_launch_description():
                 'enable_depth':               str(cam.get('enable_depth', True)).lower(),
                 'rgb_camera.color_profile':   color_profile,
                 'depth_module.depth_profile': depth_profile,
-                # TODO(REQ-42): tune QoS / pointcloud / align_depth_to_color as needs solidify
+                # TODO(REQ-42) [TASK-32]: tune QoS / pointcloud / align_depth_to_color.
             }.items(),
         ))
     except Exception as e:
@@ -144,6 +121,7 @@ def generate_launch_description():
     # ---------------------------------------------------------------
     # Custom Python nodes
     # ---------------------------------------------------------------
+    # [TASK-31]
     mic_node = Node(
         package='sensors',
         executable='mic_node',
@@ -152,6 +130,7 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
+    # [TASK-31]
     speaker_node = Node(
         package='sensors',
         executable='speaker_node',
@@ -160,6 +139,7 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
+    # [TASK-32]
     joint_state_node = Node(
         package='sensors',
         executable='joint_state_node',
@@ -168,6 +148,7 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
+    # [TASK-30]
     uwb_node = Node(
         package='sensors',
         executable='uwb_node',
