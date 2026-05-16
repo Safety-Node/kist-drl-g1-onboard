@@ -10,18 +10,8 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
-# Interface files. Order does not matter — rosidl resolves inter-message references
-# automatically.
-#
-# Design notes:
-# - 2026-05-15: ValidatedCmd was removed in favour of two separate topics —
-#   geometry_msgs/Twist for validated walking commands and JointCmd for
-#   validated upper-body joint commands. The G1 SDK runs LocoClient (lower-body
-#   walking) and rt/arm_sdk (upper-body joints) as independent controllers,
-#   so emitting them on independent topics matches the hardware semantics.
-# - 2026-05-16: ActionChunk was removed. Producers publish step-by-step
-#   JointCmd; chunk metadata (chunk_id, step_index) travels with each step.
-#   See JointCmd.msg "Wire format" section for the rationale.
+# Interface files. Order does not matter — rosidl resolves inter-message references.
+# Removed historical: ValidatedCmd (2026-05-15), ActionChunk (2026-05-16); see git log.
 set(msg_files
   "msg/AudioPCM.msg"
   "msg/JointCmd.msg"
