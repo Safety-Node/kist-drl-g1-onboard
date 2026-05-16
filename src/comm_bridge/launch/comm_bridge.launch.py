@@ -1,21 +1,28 @@
-"""comm_bridge.launch.py — launches outbound and inbound relays."""
-import os
+"""
+Launches outbound and inbound relay nodes.
 
-from ament_index_python.packages import get_package_share_directory
+Loader strategy (revised 2026-05-16):
+The relay table is a list-of-dicts (src/dst/type/qos), which ROS 2
+parameters cannot represent -- rclpy raises InvalidParameterTypeException
+on declare_parameter for list-of-dict. So each relay node loads
+comm_bridge_params.yaml directly from its package share path at startup
+(see outbound_relay.py / inbound_relay.py docstrings).
+
+Hence NO `parameters=[...]` here. If we passed the yaml as a node
+parameter, the node would die in __init__ before the loader could run.
+Future scalar-only params (e.g. a single relays_file path) can be added
+back as `parameters=[{...}]` if the loader strategy ever splits.
+"""
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory('comm_bridge')
-    params_file = os.path.join(pkg_share, 'config', 'comm_bridge_params.yaml')
-
     outbound = Node(
         package='comm_bridge',
         executable='outbound_relay',
         name='outbound_relay',
         output='screen',
-        parameters=[params_file],
     )
 
     inbound = Node(
@@ -23,7 +30,6 @@ def generate_launch_description():
         executable='inbound_relay',
         name='inbound_relay',
         output='screen',
-        parameters=[params_file],
     )
 
     return LaunchDescription([outbound, inbound])

@@ -1,9 +1,13 @@
 # comm_bridge package — runtime parameters
 # TODO(REQ-32): finalise topic remap table once /bridge/ schema is locked.
 #
-# Routing convention (2026-05-15):
-#   - /bridge/cmd/arm  ↔ rt/arm_sdk path (upper-body, weight blending)
-#   - /bridge/cmd/low  ↔ rt/lowcmd path (29-motor debug — not exposed yet, YAGNI)
+# Routing convention (2026-05-15, nav_goal type reverted to std_msgs/String 2026-05-16):
+#   - /bridge/cmd/arm      ↔ rt/arm_sdk path (upper-body, weight blending)
+#   - /bridge/cmd/loco     ↔ LocoClient discrete actions (Damp/StandUp/...)
+#   - /bridge/cmd/nav_goal ↔ std_msgs/String named goal text; goto_node looks up
+#                            named_goals.yaml -> (x, y, theta) (decision 5a reverted)
+#   - /bridge/cmd/low      ↔ rt/lowcmd path (29-motor debug — not exposed yet, YAGNI)
+#   - /bridge/cmd/audio_out ↔ TTS playback (PC TTS → onboard speaker, 16k/16-bit/mono)
 #   - QoS column: per-relay choice. Sensor streams favour BEST_EFFORT (freshness wins),
 #     state reports and command channels favour RELIABLE (don't drop transitions).
 

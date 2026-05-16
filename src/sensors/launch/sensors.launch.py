@@ -72,10 +72,22 @@ def generate_launch_description():
             cam.get('depth_fps', 30),
         )
 
+        # Resulting topic names (verify at first integration with `ros2 topic list`):
+        #   /onboard/sensors/color/image_raw/compressed
+        #   /onboard/sensors/depth/image_raw
+        # comm_bridge_params.yaml expects exactly these names. realsense2_camera
+        # builds topics as "{camera_namespace}/{camera_name}/<topic>" -- the
+        # earlier setting camera_name='onboard_camera' produced an extra
+        # "/onboard_camera/" segment that didn't match the relay table, so we
+        # drop the per-camera name and keep the prefix flat under
+        # /onboard/sensors. We are single-camera, so the disambiguator brings
+        # no value here.
+        # TODO(REQ-42): if a second camera is ever added, give each a non-empty
+        #               camera_name and update comm_bridge_params.yaml accordingly.
         external_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(realsense_launch_file),
             launch_arguments={
-                'camera_name':                'onboard_camera',
+                'camera_name':                '',
                 'camera_namespace':           '/onboard/sensors',
                 'enable_color':               str(cam.get('enable_color', True)).lower(),
                 'enable_depth':               str(cam.get('enable_depth', True)).lower(),
