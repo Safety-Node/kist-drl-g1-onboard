@@ -21,6 +21,18 @@ TODO(REQ-37): subscribe to UWB tag stream, parse anchor distances, run trilatera
 TODO(REQ-37): publish geometry_msgs/PoseStamped on /onboard/sensors/uwb/pose at
               publish_rate_hz. Set quaternion to identity (no yaw source on NX today);
               downstream consumers must treat yaw as unknown.
+              Yaw-handling contract for the only consumer today
+              (navigation/goto_node, P-controller): see goto_node.py -- it
+              ignores yaw_error unless a separate yaw source is wired in.
+              Keep that policy in sync if quaternion semantics ever change.
+TODO(REQ-37): dedup policy when publish_rate_hz exceeds the UWB hardware
+              update rate. The timer-pull model will republish the last
+              cached sample, which downstream outlier rejection / 1€ filter
+              treats as repeated identical inputs (no jitter -> no smoothing
+              update -> ok). Decide whether to (a) skip the publish when
+              the last sample is unchanged (saves bandwidth, but breaks
+              freshness watchdogs) or (b) tag a sample sequence number on
+              the message header and let consumers dedup. (b) is safer.
 TODO(REQ-37): apply outlier rejection + smoothing (median or 1€ filter) to tame UWB
               multipath jitter before publishing.
 TODO(REQ-37): load anchor table via self.get_parameters_by_prefix('anchors') --

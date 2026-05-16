@@ -6,7 +6,13 @@ mic_node:
   ros__parameters:
     capture_device: "default"     # TBD: e.g. "hw:CARD=Mic,DEV=0"
     sample_rate: 16000            # FIXED — STT expects 16 k; do not change without updating speaker_node + TTS Provider
-    channels: 1                   # mono — the 4-mic array is mixed down by ALSA
+    channels: 1                   # mono — ALSA mixes the 4-mic array down at capture.
+                                  # Trade-off (decided 2026-05-16, sensors review #2):
+                                  # gives up beamforming / DOA noise suppression in
+                                  # exchange for a single stream STT (CLOVA) accepts
+                                  # unchanged. The G1 array does some onboard AEC
+                                  # already and the demo room is acoustically simple.
+                                  # See mic_node.py docstring for the upgrade path.
     chunk_ms: 20                  # publish 20 ms PCM chunks (≈640 byte payload)
 
 # Speaker playback (TTS → Onboard). TTS Provider must resample to 16 k before publishing.
@@ -26,7 +32,14 @@ joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
     network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface name
-    domain_id: 0                  # TBD: align with comm_bridge DDS domain
+    domain_id: 0                  # TBD: verify G1 SDK DDS domain isolation at first
+                                  # integration. unitree_sdk2_python opens its own
+                                  # DDS participant; if it shares the ROS 2 domain
+                                  # the raw G1 channels (rt/lf/lowstate, rt/lowcmd,
+                                  # rt/arm_sdk) leak into `ros2 topic list`. Pin
+                                  # this to the SDK's own domain and leave the ROS 2
+                                  # nodes on a separate one. See joint_state_node.py
+                                  # TODO for the verification recipe.
     imu_frame_id: "base_link"     # frame_id stamped on sensor_msgs/Imu
 
 # RealSense D435i — these values are READ by sensors.launch.py and passed
