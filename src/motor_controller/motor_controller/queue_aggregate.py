@@ -1,5 +1,5 @@
 """
-Optional NX-side action-chunk crossfade for joint_buf. [TASK-34]
+Optional NX-side action-chunk crossfade for joint_buf.
 
 Linear blend over the overlap region when a new VLA chunk arrives before
 the previous chunk drained:

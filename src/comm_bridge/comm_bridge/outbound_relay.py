@@ -1,5 +1,6 @@
 """
 Outbound relay /onboard/* → /bridge/*.
+
 Loader: yaml.safe_load (list-of-dict cannot be a ROS 2 param).
 
 TODO(REQ-32) [TASK-28]: implement relay (loader + dynamic msg import + sub/pub + echo guard).

@@ -1,5 +1,6 @@
 """
 ALSA speaker playback ← /onboard/audio/playback (g1_onboard_msgs/AudioPCM).
+
 Publishes /onboard/audio/speaker_state (g1_onboard_msgs/SpeakerState).
 
 Trap: subscribes /onboard/audio/playback (NOT /onboard/sensors/audio/playback —
@@ -15,7 +16,7 @@ from rclpy.node import Node
 class SpeakerNode(Node):
     def __init__(self) -> None:
         super().__init__('speaker_node')
-        # TODO(REQ-29) [TASK-31]: declare params, open ALSA playback, queue + writer thread.
+        # TODO(REQ-29) [TASK-36]: declare params, open ALSA playback, queue + writer thread.
         self.get_logger().info('speaker_node started (TBD)')
 
 

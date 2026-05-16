@@ -1,5 +1,5 @@
 """
-Point-to-point navigator using UWB absolute pose. [TASK-35]
+Point-to-point navigator using UWB absolute pose.
 
 Inputs:
 - /onboard/sensors/uwb/pose   (PoseStamped)  current absolute pose

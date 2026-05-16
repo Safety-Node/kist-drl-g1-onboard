@@ -3,7 +3,7 @@ Launches onboard sensor nodes.
 
 Composition:
 - camera_node       realsense2_camera (external C++ driver)  [TASK-32]
-- mic_node          sensors.mic_node                          [TASK-31]
+- mic_node          sensors.mic_node                          [TASK-36]
 - speaker_node      sensors.speaker_node                      [TASK-31]
 - joint_state_node  sensors.joint_state_node                  [TASK-32]
 - uwb_node          sensors.uwb_node                          [TASK-30]
@@ -130,7 +130,7 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
-    # [TASK-31]
+    # [TASK-36]
     speaker_node = Node(
         package='sensors',
         executable='speaker_node',

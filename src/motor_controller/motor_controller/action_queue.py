@@ -1,5 +1,5 @@
 """
-Lock-free Ring Buffer for safety-validated motor commands. [TASK-34]
+Lock-free Ring Buffer for safety-validated motor commands.
 
 Two SPSC FIFOs (per actuator surface):
   velocity_buf  : LocoClient.Move commands       (producer: _on_validated_twist)

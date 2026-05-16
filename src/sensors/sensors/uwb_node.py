@@ -1,5 +1,6 @@
 """
 UWB beacon receiver → /onboard/sensors/uwb/pose (geometry_msgs/PoseStamped).
+
 Replaces SLAM-based localisation (REQ-37).
 
 Trap: anchor table is dict-of-list — load via self.get_parameters_by_prefix('anchors').

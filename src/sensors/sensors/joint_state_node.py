@@ -1,6 +1,9 @@
 """
-G1 SDK lowstate → /onboard/sensors/joint_states (JointState) + /onboard/sensors/imu/data (Imu).
-Single lowstate subscription fanned out (saves CPU + avoids DDS reader race).
+G1 SDK lowstate fan-out → JointState + Imu publishers.
+
+Single lowstate subscription fanned out (saves CPU + avoids DDS reader race) to
+/onboard/sensors/joint_states (sensor_msgs/JointState) and /onboard/sensors/imu/data
+(sensor_msgs/Imu).
 
 Trap: G1 SDK opens its own DDS participant. If sharing ROS 2 domain_id, raw G1
       channels (rt/lf/lowstate, rt/lowcmd, rt/arm_sdk) leak into ros2 topic list.
