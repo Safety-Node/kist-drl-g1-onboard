@@ -52,6 +52,15 @@ def crossfade(old_tail: List[List[float]],
         w = i / overlap
         old_v = old_tail[i]
         new_v = new_chunk[i]
+        # Defensive length check: zip() would silently truncate to the shorter
+        # side and quietly drop joints if the two chunks ever disagreed on
+        # joint count (e.g. cross-VLA version, partial set rewiring). Detect
+        # it here so the dispatcher can flag malformed input rather than
+        # publish a half-blended command.
+        if len(old_v) != len(new_v):
+            raise ValueError(
+                f'crossfade step {i}: joint-count mismatch '
+                f'(old={len(old_v)} vs new={len(new_v)})')
         blended.append([(1.0 - w) * o + w * n for o, n in zip(old_v, new_v)])
     blended.extend(new_chunk[overlap:])
     return blended

@@ -56,10 +56,15 @@ class MotorControllerNode(Node):
         #               estop_loco_action, network_interface, domain_id, estop_shm_name)
         # TODO(REQ-34): init unitree_sdk2_python — LocoClient handle + rt/arm_sdk publisher
         #               (+ optional rt/lowcmd publisher behind a debug flag)
+        # TODO(REQ-35): validate estop_loco_action at startup via
+        #               hasattr(loco_client, estop_loco_action). A yaml typo
+        #               ("Damp" -> "damp") would otherwise raise AttributeError
+        #               at the worst possible moment -- the first E-STOP.
+        #               Fail fast at construction instead.
         # TODO(REQ-35): open shared-memory 'safety_flag' read-only
         # TODO(REQ-34): create publisher /onboard/motor/buf_state (g1_onboard_msgs/BufState)
-        # TODO(REQ-34): subscribe /onboard/safety/validated_twist (Twist) → velocity_buf
-        # TODO(REQ-34): subscribe /onboard/safety/validated_joint (JointCmd) → joint_buf
+        # TODO(REQ-34): subscribe /onboard/safety/validated_twist (Twist) → push_velocity
+        # TODO(REQ-34): subscribe /onboard/safety/validated_joint (JointCmd) → push_joint
         # TODO(REQ-35): subscribe /onboard/safety/estop (EstopFlag) — structured context
         # TODO(REQ-34): subscribe /onboard/cmd/loco (LocoCommand) — LocoClient dispatch
         # TODO(REQ-34, REQ-38): launch 20 Hz control loop thread (busy-wait hybrid timer)
@@ -67,7 +72,11 @@ class MotorControllerNode(Node):
         #               validated_joint arrives; ramp back to 0.0 on ESTOP / shutdown
 
         # ActionQueue construction will switch to the declared param once params are wired.
-        self._queue = ActionQueue(slots=64)   # TODO(REQ-34): use ring_buffer_slots param
+        # NOTE(REQ-34): the hard-coded 64 happens to match motor_params.yaml's
+        #               ring_buffer_slots, but it is NOT read from yaml yet. Any
+        #               change to the yaml has no effect until the param wiring
+        #               lands -- see the matching comment in motor_params.yaml.
+        self._queue = ActionQueue(slots=64)
         self.get_logger().info('motor_controller_node started (TBD)')
 
     # TODO(REQ-34, REQ-38): def _control_loop(self) -> None
@@ -76,9 +85,21 @@ class MotorControllerNode(Node):
     #       2. pop_velocity -> _execute_velocity (LocoClient.Move)
     #       3. pop_joint    -> _execute_joint    (rt/arm_sdk publish, with weight)
     #       4. publish BufState (fill ratios + control rate + counters)
-    # TODO(REQ-34): def _on_validated_twist(self, msg)  -- push to velocity_buf
-    # TODO(REQ-34): def _on_validated_joint(self, msg)  -- push to joint_buf (crossfade if overlap)
+    # TODO(REQ-34): def _on_validated_twist(self, msg)  -- wrap in VelocityCommand,
+    #               push_velocity.
+    #               Deadband / cache policy: if safety_monitor publishes
+    #               validated_twist every tick (including zero-Twist while idle),
+    #               LocoClient.Move() gets called continuously and may surface
+    #               jitter inside G1's walking controller. Decide at integration
+    #               time whether to (a) deadband near-zero Twists, (b) skip
+    #               dispatch when Twist equals the last sent one, or (c) rely
+    #               on safety_monitor publishing only on change. (c) is the
+    #               cleanest but requires confirming the safety_monitor cadence.
+    # TODO(REQ-34): def _on_validated_joint(self, msg)  -- wrap in JointCommand,
+    #               push_joint (crossfade if optional NX-side fallback is enabled
+    #               and msg.step_index == 0 with a new msg.chunk_id).
     # TODO(REQ-34): def _on_loco_command(self, msg)     -- dispatch by LocoCommand.action
+    #                                                    (one-shot RPC, bypasses queue)
     # TODO(REQ-35): def _on_estop_flag(self, msg)       -- cache reason/detail for telemetry
     # TODO(REQ-34): def _execute_velocity(self, cmd)    -- LocoClient.Move(vx, vy, vyaw)
     # TODO(REQ-34): def _execute_joint(self, cmd)       -- rt/arm_sdk publish (current_weight)
