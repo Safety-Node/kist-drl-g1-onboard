@@ -13,9 +13,14 @@ motor_controller:
     # ---------- Ring buffer (action_queue) ----------
     ring_buffer_slots: 64
 
-    # ---------- VLA action-chunk crossfade (joint_buf only) ----------
-    # velocity_buf is unaffected — LocoClient handles walking inertia itself.
-    chunk_size: 30
+    # ---------- VLA action-chunk crossfade (joint_buf only, OPTIONAL) ----------
+    # 2026-05-16 (msg review option (a')): NX wire is step-by-step JointCmd;
+    # crossfade canonically lives at the producer (PC VLA). These params are
+    # scaffold for an NX-side fallback that detects chunk transitions via
+    # JointCmd.chunk_id / step_index and reuses queue_aggregate.crossfade().
+    # Disabled by default. velocity_buf is unaffected (LocoClient handles
+    # walking inertia itself).
+    chunk_size: 30                 # expected steps per chunk (informational)
     crossfade_threshold_g: 0.7     # SmolVLA §3.3 "g" gating threshold — when |Δq| between
                                    # consecutive chunks exceeds this, run crossfade overlap;
                                    # below it, splice without blending. (TBD: confirm with

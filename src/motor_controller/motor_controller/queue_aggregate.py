@@ -1,5 +1,5 @@
 """
-VLA action-chunk crossfade for joint_buf.
+Optional NX-side action-chunk crossfade for joint_buf.
 
 When a new action chunk arrives while the previous chunk still has 'overlap' actions
 remaining, blend them linearly so the joint trajectory stays smooth.
@@ -13,6 +13,17 @@ Formula (per spec):
 Applies to joint_buf only. velocity_buf is unaffected (LocoClient handles walking inertia).
 
 Embedded analogy: identical in spirit to S-curve velocity blending or audio crossfading.
+
+Wire-format note (2026-05-16, msg review option (a')):
+    The NX wire format is step-by-step JointCmd carrying chunk_id + step_index.
+    The canonical expectation is that the producer (PC VLA Provider) does its own
+    crossfade *before* publishing — crossfade lives next to inference.
+
+    motor_controller can still invoke this function as a fallback by detecting
+    chunk transitions (step_index == 0 with a new chunk_id) and grouping the
+    tail of the previous chunk + the head of the new chunk. Off by default;
+    controlled by motor_params.yaml (chunk_size, crossfade_threshold_g) which
+    are kept as scaffold but unused unless NX-side crossfade is enabled.
 """
 from typing import List
 

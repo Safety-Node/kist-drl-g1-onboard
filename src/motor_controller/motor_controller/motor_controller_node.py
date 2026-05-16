@@ -4,6 +4,10 @@
 Subscribes (DDS):
 - /onboard/safety/validated_twist (Twist)        -- safety -> velocity_buf
 - /onboard/safety/validated_joint (JointCmd)     -- safety -> joint_buf
+                                                    JointCmd carries chunk_id +
+                                                    step_index; chunk_id == 0
+                                                    means non-chunked producer
+                                                    (teleop / scripted / CLI).
 - /onboard/safety/estop (EstopFlag)              -- structured context (PC mirror)
 - /onboard/cmd/loco (LocoCommand)                -- LocoClient action dispatch
 
@@ -37,7 +41,9 @@ import rclpy
 from rclpy.node import Node
 
 from .action_queue import ActionQueue
-from .queue_aggregate import crossfade  # noqa: F401  (used once VLA chunks land)
+from .queue_aggregate import crossfade  # noqa: F401  (optional NX-side fallback;
+                                        # canonical crossfade lives at PC VLA Provider
+                                        # per 2026-05-16 msg review option (a'))
 
 
 class MotorControllerNode(Node):
