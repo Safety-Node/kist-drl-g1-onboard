@@ -1,10 +1,9 @@
-# navigation / goto_node — runtime parameters
+# navigation / goto_node -- runtime parameters
 # TODO(REQ-37): tune gains and tolerances after first integration test.
 #
-# Note (2026-05-15 comm_bridge review, decision 5a): named-goal resolution
-# is owned by the PC side. goto_node accepts only PoseStamped, so there is
-# no named_goals_file param here — the previous `named_goals.yaml` in this
-# package was deleted accordingly.
+# Note (2026-05-16): decision 5a reverted. NX accepts named goal text on
+# /onboard/cmd/nav_goal (std_msgs/String) and looks it up in named_goals.yaml.
+# PC just publishes the human-readable name for debugging convenience.
 
 goto_node:
   ros__parameters:
@@ -21,7 +20,11 @@ goto_node:
 
     # Tolerances for "goal reached"
     position_tolerance: 0.15      # m
-    yaw_tolerance: 0.15           # rad (~ 8.6°)
+    yaw_tolerance: 0.15           # rad (~ 8.6 deg)
 
     # Watchdog
     uwb_timeout_s: 1.0            # if UWB pose stale > this, halt and report FAILED
+
+    # Named-goal lookup table (relative to share/<pkg>/config/)
+    # Loaded at startup; missing keys -> NavState.STATUS_FAILED with error message.
+    named_goals_file: "named_goals.yaml"

@@ -1,0 +1,27 @@
+# Named goal table -- maps a human-readable target name (received as
+# std_msgs/String on /onboard/cmd/nav_goal) to an absolute (x, y, theta)
+# pose in the UWB 'map' frame.
+#
+# Re-introduced 2026-05-16 after reverting decision 5a -- NX now owns the
+# named-goal lookup again so the PC side can publish ergonomic strings
+# like "refrigerator" for debugging convenience (vs. typing coordinates).
+#
+# TODO(REQ-30): populate from the UWB anchor survey of the actual demo space.
+
+named_goals:
+  refrigerator:
+    x: 0.0      # TBD (m, map frame)
+    y: 0.0      # TBD
+    theta: 0.0  # TBD (rad)
+  sink:
+    x: 0.0      # TBD
+    y: 0.0
+    theta: 0.0
+  prep_table:
+    x: 0.0      # TBD
+    y: 0.0
+    theta: 0.0
+  home:
+    x: 0.0
+    y: 0.0
+    theta: 0.0
