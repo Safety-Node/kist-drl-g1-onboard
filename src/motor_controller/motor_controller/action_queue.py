@@ -25,8 +25,36 @@ Overflow policy (decided 2026-05-16):
   Both deques use maxlen=slots, which silently drops the oldest entry on
   overflow. To still count overflow events for /onboard/motor/buf_state
   telemetry, push_velocity / push_joint check len(buf) == slots BEFORE
-  appending and increment overrun_count -- without the explicit check,
-  deque eviction is invisible.
+  appending and increment per-buf overrun counters -- without the explicit
+  check, deque eviction is invisible.
+
+Concurrency model (decided 2026-05-16, motor_controller review round 2):
+  SPSC holds per BUFFER, not for the combined counters. Mapping:
+
+    velocity_buf : producer = _on_validated_twist callback
+                   consumer = control loop
+    joint_buf    : producer = _on_validated_joint callback
+                   consumer = control loop
+
+  Each buffer has exactly one producer and one consumer, so the deque
+  itself can become a lock-free SPSC ring once we replace the
+  NotImplementedError stubs. The counters need slightly more care:
+
+    _velocity_overrun_count : written only by velocity producer  -> single-writer
+    _joint_overrun_count    : written only by joint producer     -> single-writer
+    _underrun_count         : written only by control loop       -> single-writer
+                              (both pop paths run on the same thread)
+
+  We deliberately split overrun by buffer rather than keep a combined
+  counter so each counter stays single-writer even if a future
+  MultiThreadedExecutor lets the two pop/push callbacks run
+  concurrently. The public `overrun_count` property sums them at read
+  time so /onboard/motor/buf_state's single field stays unchanged.
+
+  This makes the ordinary `+= 1` increments safe without locks under
+  every executor type we are likely to use, instead of leaning on
+  CPython GIL semantics that don't translate to other runtimes (or to
+  a future C/Rust rewrite of the hot path).
 
 TODO(REQ-34): implement push / pop / flush with a single-producer
               single-consumer SPSC pattern (atomic head/tail).
@@ -70,12 +98,18 @@ class ActionQueue:
     def __init__(self, slots: int = 64) -> None:
         self._slots = slots
         # maxlen makes deque drop-oldest on overflow (our chosen policy);
-        # the explicit length check inside push_* increments overrun_count
-        # for telemetry. Without it, drop-oldest would be invisible.
+        # the explicit length check inside push_* increments the matching
+        # per-buf overrun counter for telemetry. Without it, drop-oldest
+        # would be invisible.
         self._velocity_buf: Deque[VelocityCommand] = deque(maxlen=slots)
         self._joint_buf: Deque[JointCommand] = deque(maxlen=slots)
-        self._overrun_count: int = 0   # combined across both bufs (matches BufState schema)
-        self._underrun_count: int = 0  # incremented on pop from empty buf
+        # Per-buf counters keep each one single-writer; see the
+        # "Concurrency model" block in the module docstring for the
+        # producer/consumer mapping. `overrun_count` sums them at the
+        # property boundary so BufState's single field stays unchanged.
+        self._velocity_overrun_count: int = 0   # writer: velocity producer
+        self._joint_overrun_count: int = 0      # writer: joint producer
+        self._underrun_count: int = 0           # writer: control loop (only popper)
 
     # TODO(REQ-34): make push/pop lock-free (SPSC, atomic head/tail).
     def push_velocity(self, cmd: VelocityCommand) -> None:
@@ -121,10 +155,17 @@ class ActionQueue:
 
     @property
     def overrun_count(self) -> int:
-        """Pushes that landed on a full buffer (oldest entry was evicted)."""
-        return self._overrun_count
+        """Pushes that landed on a full buffer (oldest entry was evicted).
+
+        Sum of per-buf counters. Read from the control loop thread; each
+        underlying counter is single-writer (the matching push callback)
+        so the two int reads are individually safe under any executor.
+        The sum can be off by 1 if a push races the read, which is fine
+        for telemetry -- the next BufState publish will catch up.
+        """
+        return self._velocity_overrun_count + self._joint_overrun_count
 
     @property
     def underrun_count(self) -> int:
-        """Pops that found the buffer empty."""
+        """Pops that found the buffer empty. Single-writer (control loop)."""
         return self._underrun_count
