@@ -14,7 +14,11 @@ uint8 STATUS_CANCELED = 4   # external cancel request
 uint8 status
 
 # Goal context
-string  target_name          # named_goal key, or empty if goal was a raw PoseStamped
+# Post-2026-05-16 (decision 5a reverted): nav_goal is always a named_goal text
+# key on /onboard/cmd/nav_goal; goto_node resolves it via named_goals.yaml.
+# target_name is therefore always populated while status != IDLE. Reserved
+# empty for a hypothetical future direct-PoseStamped path (none today).
+string  target_name          # named_goal key (e.g. "refrigerator")
 float32 distance_to_goal_m   # straight-line distance to goal in metres
 float32 yaw_error_rad
 

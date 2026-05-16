@@ -29,4 +29,8 @@ uint8 action
 
 # Optional integer parameter (e.g. gait type, balance mode index).
 # Most actions ignore this. Senders can leave it 0.
+#
+# TODO(REQ-34): if a future LocoClient API needs a float param (e.g. SetSpeed),
+#               extend the schema with `float32 param_f32` rather than retyping
+#               this field, so existing int-param consumers keep working.
 int32 param
