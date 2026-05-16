@@ -2,7 +2,15 @@
 #           sudo systemctl daemon-reload
 #           sudo systemctl enable --now motor_controller
 #
-# TODO(infra): pin the workspace overlay path and User= once deployment account is decided.
+# TODO(infra): pin the workspace overlay path once decided.
+# TODO(infra): decide User=. Currently unset, so the unit runs as root.
+#   Options:
+#     (a) keep root  -- standard pattern for RT-priority units; Nice=-20 and
+#                       LimitMEMLOCK=infinity just work, no capability juggling.
+#     (b) dedicated  -- e.g. User=g1-motor with CAP_SYS_NICE and a
+#                       MemoryLock-allowed setting; smaller blast radius if the
+#                       process is compromised, at the cost of capability setup.
+#   Pick (a) for the demo, revisit if security review pushes for (b).
 
 [Unit]
 Description=G1 Motor Controller (20Hz Ring Buffer + E-STOP handler)

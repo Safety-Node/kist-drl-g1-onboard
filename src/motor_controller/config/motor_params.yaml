@@ -11,6 +11,10 @@ motor_controller:
     busy_wait_fraction: 0.2        # busy-wait the last 20% of each tick for low jitter
 
     # ---------- Ring buffer (action_queue) ----------
+    # NOTE: motor_controller_node.py currently hard-codes ActionQueue(slots=64);
+    # this yaml value is documentation-only until the param wiring lands
+    # (see TODO in motor_controller_node.__init__). Editing the number here
+    # has no runtime effect today.
     ring_buffer_slots: 64
 
     # ---------- VLA action-chunk crossfade (joint_buf only, OPTIONAL) ----------
@@ -31,7 +35,10 @@ motor_controller:
     # and our user command (formula: actual = motion * (1 - weight) + user * weight).
     arm_default_weight: 1.0        # nominal value once a JointCmd stream is active
     arm_weight_ramp_steps: 101     # linspace points for the start-up / hand-back ramp
-    arm_weight_ramp_dt: 0.02       # seconds per step → 101 × 20 ms ≈ 2 s total ramp
+    arm_weight_ramp_dt: 0.02       # seconds per step. linspace(0, 1, 101) yields 101
+                                   # points = 100 intervals × 20 ms = exactly 2.0 s.
+                                   # Verify np.linspace(endpoint=True) at implementation
+                                   # so the upper boundary (weight=1.0) is actually hit.
 
     # ---------- LocoCommand routing ----------
     # Map of LocoCommand.action enum → method to call on unitree_sdk2_python LocoClient.
