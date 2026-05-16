@@ -62,6 +62,19 @@ G1 Onboard (Orin NX)                                  â†• Ethernet/CycloneDDS â†
 `comm_bridge` is the only container that subscribes `/onboard/*` and publishes to `/bridge/*`
 (and vice-versa).
 
+### Audio sub-namespaces (2026-05-16)
+
+Mic and speaker live under different prefixes on purpose:
+
+| Topic | Role |
+|---|---|
+| `/onboard/sensors/audio/pcm` | mic capture (mic = sensor / input device) |
+| `/onboard/audio/playback` | speaker input (speaker = actuator / output device) |
+| `/onboard/audio/speaker_state` | speaker telemetry (STT echo-cancel hint) |
+
+Only `mic_node` is a sensor; `speaker_node` is an actuator, so its inputs and
+outputs sit directly under `/onboard/audio/` rather than under `/onboard/sensors/`.
+
 ## Real-time Constraints
 
 | Path | Requirement | Notes |
