@@ -2,12 +2,14 @@
 
 **KIST DRL — Unitree G1 NX Onboard Software Stack**
 
-ROS 2 Humble workspace running on the Jetson Orin NX onboard the Unitree G1 humanoid.
-Handles sensor publishing, UWB-based point-to-point navigation, NX↔PC bridging,
-real-time safety, and motor execution.
+ROS 2 Humble workspace for the Jetson Orin NX onboard the Unitree G1.
+Sensor publishing, UWB navigation, NX↔PC bridging, real-time safety, motor execution.
 
 > Target HW: Unitree G1 + Jetson Orin NX (Ubuntu 22.04, JetPack 6.x)
-> Companion repo: `kist-drl-g1-ws` (PC / RTX 4090 side — VLA / Cortex / Providers)
+> Companion repo: `kist-drl-g1-ws` (PC side — VLA / Cortex / Providers)
+
+> 🚧 **Scaffold only.** Node bodies carry `TODO(REQ-XX) [TASK-XX]` markers that
+> link back to the Notion Task DB.
 
 ---
 
@@ -15,194 +17,59 @@ real-time safety, and motor execution.
 
 | Package | Build | Role |
 |---|---|---|
-| `g1_onboard_msgs` | `ament_cmake` | Custom interfaces (AudioPCM, …) |
-| `sensors` | `ament_python` | RealSense Camera / IMU / Mic / JointState / **UWB** publishers |
-| `comm_bridge` | `ament_python` | `/onboard/` ↔ `/bridge/` topic relay + QoS conversion |
-| `navigation` | `ament_python` | UWB-based `goto_node` (P-controller, no Nav2 stack) |
-| `safety_monitor` | `ament_python` | 200ms E-STOP, joint/velocity/proximity validation (systemd) |
-| `motor_controller` | `ament_python` | 20Hz control loop, Ring Buffer + VLA chunk crossfade (systemd) |
-
-See [docs/architecture.md](docs/architecture.md) for the data flow and topic naming convention.
+| `g1_onboard_msgs` | ament_cmake | Custom interfaces (AudioPCM, JointCmd, …) |
+| `sensors` | ament_python | RealSense / mic / speaker / joint_state / UWB |
+| `comm_bridge` | ament_python | `/onboard/` ↔ `/bridge/` relay + QoS conversion |
+| `navigation` | ament_python | UWB `goto_node` (P-controller) |
+| `safety_monitor` | ament_python | 200 ms E-STOP + command validation (systemd) |
+| `motor_controller` | ament_python | 20 Hz G1 SDK dispatch (systemd) |
 
 ---
 
-## Design Notes (2026-05-14 spec change)
-
-- **Localisation: UWB only.** SLAM / AMCL / LiDAR removed. `uwb_node` publishes absolute
-  `PoseStamped` in the `map` frame.
-- **Navigation: P-controller.** Nav2 stack (map_server, planner_server, controller_server,
-  bt_navigator) removed. The demo environment is fixed and obstacle-free, so a single
-  `goto_node` drives the robot directly to named goals.
-- **Camera: kept** — RealSense D435i still feeds (a) safety_monitor proximity E-STOP via
-  Depth, and (b) PC-side VLA inference via `comm_bridge`.
-- **LiDAR: removed.** Livox MID-360 is no longer in the loop.
-- **IMU: published, not consumed.** Available for future safety / RT monitoring use.
-
-## Design Notes (2026-05-15 package reviews)
-
-- **Audio split.** `audio_node` → `mic_node` (capture) + `speaker_node` (playback + state).
-  Pipeline format locked to 16 kHz / 16-bit / mono; PC-side TTS (CLOVA at 22/24 kHz)
-  resamples before publishing.
-- **IMU fan-out.** `joint_state_node` subscribes G1 SDK lowstate once and publishes both
-  `sensor_msgs/JointState` and `sensor_msgs/Imu`. No standalone `imu_node`.
-- **Motor routing (4 modes).** `motor_controller` dispatches by mode:
-  `VELOCITY_CMD → LocoClient.Move()`, `JOINT_CMD → rt/arm_sdk` (with weight blending,
-  G1's `motor_cmd[29].q`), `LOCO_CMD → LocoClient.{Damp,StandUp,...}()`,
-  `ESTOP → LocoClient.Damp() + weight ramp 1.0→0.0 + buffer flush`. `rt/lowcmd` is a
-  debug-only optional path.
-- **Safety output split.** `safety_monitor` publishes two validated topics
-  (`validated_twist` + `validated_joint`) instead of a single `validated_cmd`, plus
-  `EstopFlag` on DDS and a POSIX shared-memory byte for the zero-latency stop path.
-- **Named goals: NX owns the lookup table** (2026-05-16 revert of 5a). PC publishes the
-  human-readable name as `std_msgs/String` on `/bridge/cmd/nav_goal`; `goto_node`
-  resolves it via `named_goals.yaml` -> `(x, y, theta)`. Unknown names produce
-  `NavState.STATUS_FAILED`. Trade NX coupling for one-line CLI debugging
-  (`ros2 topic pub /bridge/cmd/nav_goal std_msgs/String "data: 'refrigerator'"`).
-
----
-
-## Quick start for a new developer
-
-1. **현재 위치 잡기** — `docs/architecture.md`를 1분 안에 훑으면 NX 데이터 흐름이 손에 잡힘.
-2. **본인 작업 찾기** — REQ ID로 grep:
-   ```bash
-   grep -rn "TODO(REQ-35)" src/   # 예: 안전 관련 작업
-   grep -rn "TODO(REQ-34)" src/   # 예: 모터 제어
-   grep -rn "TODO(infra)"  .      # 빌드/배포 등 spec 무관 항목
-   ```
-3. **단일 패키지 빌드** — 전체 build 안 돌리고:
-   ```bash
-   ./scripts/build.sh sensors        # 하나만
-   ```
-4. **드라이버 없이 dev 빌드** — RealSense / G1 SDK 미설치 상태에서도 launch 통과:
-   - 기본값: 경고만 출력 후 진행
-   - 실배포 보드: `SENSORS_REQUIRE_CAMERA=1` 로 하드 fail 권장
-5. **노드 단독 실행** — 전체 스택 안 띄우고 한 노드만 테스트:
-   ```bash
-   source install/setup.bash
-   ros2 run sensors mic_node --ros-args --params-file install/sensors/share/sensors/config/sensors_params.yaml
-   ```
-
----
-
-## Build (host, native colcon)
+## Build & Run
 
 ```bash
-# Source ROS 2 Humble
 source /opt/ros/humble/setup.bash
-
-# Install dependencies (first time)
 rosdep install --from-paths src --ignore-src -r -y
-
-# Build
 colcon build --symlink-install
-
-# Source the overlay
 source install/setup.bash
+
+./scripts/run_onboard.sh                       # all nodes
+ros2 launch <pkg> <pkg>.launch.py              # one package
 ```
 
-Convenience wrapper: `./scripts/build.sh`.
+`safety_monitor` and `motor_controller` run as **systemd services** on the deployed
+NX — copy each package's `systemd/*.service` to `/etc/systemd/system/` and enable.
 
 ---
 
-## Run
+## Topic Convention
 
-```bash
-# All onboard nodes
-./scripts/run_onboard.sh
+- `/onboard/*` — NX-internal (blocked from the LAN by `config/cyclonedds.xml` partition)
+- `/bridge/*` — NX ↔ PC shared
 
-# Or individually
-ros2 launch sensors           sensors.launch.py
-ros2 launch comm_bridge       comm_bridge.launch.py
-ros2 launch navigation        navigation.launch.py
-ros2 launch safety_monitor    safety_monitor.launch.py
-ros2 launch motor_controller  motor_controller.launch.py
-```
-
-`safety_monitor` and `motor_controller` are intended to run as **systemd services** on the
-deployed Orin NX. Unit files live under each package's `systemd/` directory — copy to
-`/etc/systemd/system/` and `systemctl enable --now`.
+Full interface contract lives in the ICD database (link below).
 
 ---
 
-## Topic Naming Convention
+## Where the spec lives
 
-- `/onboard/*` — NX-internal only. DDS partition filter (`config/cyclonedds.xml`) blocks
-  them from the Ethernet wire.
-- `/bridge/*`  — Shared with the PC workstation (same DDS Domain ID).
+| Layer | Notion |
+|---|---|
+| Requirements | [SYS-REQ DB](https://www.notion.so/d7d7c9b9943b4018a4bce2afb904d706) |
+| Interface contracts | [ICD DB](https://www.notion.so/b319b5cec8f2429389fb5fac8c042503) |
+| Work items | [Tasks DB](https://www.notion.so/cd779d7a54b343b6a9e5449f4620a44c) |
+| Verification | [Tests DB](https://www.notion.so/a67e62ef1cfc4f85be29a340107846b6) |
 
-Command channels (2026-05-15 routing convention):
-
-| Topic | Type | Path |
-|---|---|---|
-| `/onboard/cmd/arm`  | `g1_onboard_msgs/JointCmd`    | upper-body via `rt/arm_sdk` (weight blending) |
-| `/onboard/cmd/loco` | `g1_onboard_msgs/LocoCommand` | discrete LocoClient actions (Damp / StandUp / ...) |
-| `/onboard/cmd/nav_goal` | `std_msgs/String` | named goal key (e.g. `"refrigerator"`); goto_node looks up `named_goals.yaml` |
-| `/onboard/safety/validated_twist` | `geometry_msgs/Twist` | safety-gated walking command |
-| `/onboard/safety/validated_joint` | `g1_onboard_msgs/JointCmd` | safety-gated arm command |
-| `/onboard/safety/estop` | `g1_onboard_msgs/EstopFlag` | structured E-STOP event (DDS, PC-facing) |
-| POSIX shm `safety_flag` | uint8 byte | zero-latency E-STOP (motor_controller polls every tick) |
+Each `TODO([TASK-XX])` in code links to the matching Task page.
 
 ---
 
 ## Contributing
 
-Branch protection enforces these conventions on every PR — set them up locally
-to avoid CI red.
+PRs are squash-merged to `main`. Conventions enforced in CI:
 
-**Branch name** — `TASK-{number}[-kebab-description]`
-```
-TASK-42                          # ok
-TASK-42-add-uwb-driver           # ok
-feature/uwb                      # rejected
-```
+- Branch name: `TASK-{number}[-kebab-description]`
+- PR title: [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 
-**PR title** — [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
-```
-feat(sensors): add UWB vendor SDK driver           # ok
-fix(motor): clear ring buffer on E-STOP            # ok
-docs: update topic naming table                    # ok (no scope)
-Add UWB driver                                     # rejected (no type, capital)
-```
-
-Allowed types: `feat fix docs style refactor perf test build ci chore revert`.
-Recommended scopes: `sensors comm_bridge navigation safety motor msgs infra docs`.
-
-Repo is configured for **squash-merge only**, so the PR title becomes the
-commit on `main` — local commit messages stay free-form. Required CI checks:
-
-| Check | Source |
-|---|---|
-| `colcon build + test (ROS 2 humble)` | `.github/workflows/ci.yml` |
-| `Validate branch name (TASK-{number})` | `.github/workflows/pr-meta.yml` |
-| `Validate PR title (Conventional Commits)` | `.github/workflows/pr-meta.yml` |
-
-CI uses apt + ccache + colcon caching (~3-5 min cold → ~1-2 min warm). The colcon
-cache keys on `package.xml` / `CMakeLists.txt` / `*.py` / `*.msg` / `*.yaml` hashes,
-so unchanged packages skip rebuild — incremental build in CI by hash.
-
----
-
-## Status
-
-🚧 **Scaffold only.** Every node body and config file currently contains `TODO(REQ-XX)`
-markers tied to the SYS-REQ Notion database (or `TODO(infra)` for build/deploy items).
-No business logic is implemented yet.
-
-Grep your way to work:
-```bash
-grep -rn "TODO(REQ"   src/   # spec-tied work
-grep -rn "TODO(infra" .      # build / deploy / CI items
-```
-
-REQ ID legend:
-- REQ-27: voice command recognition (STT input)
-- REQ-29: voice response output (TTS playback)
-- REQ-30: named-goal routing
-- REQ-32: NX↔PC bidirectional gateway
-- REQ-33: NX↔PC wired transport (5 ms RTT)
-- REQ-34: 20 Hz motor control
-- REQ-35: motion command validation + 200 ms E-STOP (ISO 13482)
-- REQ-37: indoor autonomous navigation (now UWB-based)
-- REQ-38: 20 Hz pipeline timing NFR
-- REQ-42: sensor data collection & PC delivery (HAL)
+See `.github/workflows/pr-meta.yml`.
