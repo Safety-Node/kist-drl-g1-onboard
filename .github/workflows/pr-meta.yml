@@ -13,6 +13,13 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+# amannn/action-semantic-pull-request reads PR metadata via the GitHub API
+# (default GITHUB_TOKEN perms are restrictive since 2023). Declare at the
+# workflow level so the org-level GITHUB_TOKEN policy is overridden cleanly.
+permissions:
+  pull-requests: write
+  statuses: write
+
 jobs:
   branch-name:
     name: Validate branch name (TASK-{number})
@@ -41,12 +48,6 @@ jobs:
   pr-title:
     name: Validate PR title (Conventional Commits)
     runs-on: ubuntu-latest
-    # amannn/action-semantic-pull-request reads PR metadata via the GitHub API
-    # and needs pull-requests:read (GITHUB_TOKEN default permissions are
-    # restrictive since 2023). Without this the step fails with
-    # "Resource not accessible by integration".
-    permissions:
-      pull-requests: read
     steps:
       - name: Check Conventional Commits
         uses: amannn/action-semantic-pull-request@v5
