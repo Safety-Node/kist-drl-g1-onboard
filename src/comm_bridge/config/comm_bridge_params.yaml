@@ -3,7 +3,7 @@
 # See container page for routing convention, QoS policy, audio_out / lowcmd plans:
 #   https://www.notion.so/comm_bridge-355b39de7dd781d1b207f006610c3906
 #
-# TODO(REQ-32) [TASK-XX]: finalise after /bridge/ schema is locked.
+# TODO(REQ-32) [TASK-28]: finalise after /bridge/ schema is locked.
 
 outbound_relay:
   ros__parameters:
