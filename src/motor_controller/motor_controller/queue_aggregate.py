@@ -1,43 +1,33 @@
 """
-Optional NX-side action-chunk crossfade for joint_buf.
+Optional NX-side action-chunk crossfade for joint_buf. [TASK-34]
 
-When a new action chunk arrives while the previous chunk still has 'overlap' actions
-remaining, blend them linearly so the joint trajectory stays smooth.
-
-Formula (per spec):
+Linear blend over the overlap region when a new VLA chunk arrives before
+the previous chunk drained:
     for i in range(overlap):
-        w = i / overlap                       # 0.0 → 1.0
-        blended[i] = (1 - w) * old[i] + w * new[i]
+        w = i / overlap          # 0.0 → 1.0
+        blended[i] = (1-w)*old[i] + w*new[i]
     blended[overlap:] = new[overlap:]
 
-Applies to joint_buf only. velocity_buf is unaffected (LocoClient handles walking inertia).
+Canonical crossfade lives at the PC VLA Provider (next to inference).
+This function is the NX-side fallback, activated when motor_controller
+detects a chunk boundary (step_index==0 with a new chunk_id). OFF by
+default. velocity_buf is unaffected (LocoClient handles walking inertia).
 
-Embedded analogy: identical in spirit to S-curve velocity blending or audio crossfading.
+Trap: zip() over (old_v, new_v) would silently truncate on length mismatch;
+this function raises ValueError instead so a producer-side bug surfaces.
 
-Wire-format note (2026-05-16, msg review option (a')):
-    The NX wire format is step-by-step JointCmd carrying chunk_id + step_index.
-    The canonical expectation is that the producer (PC VLA Provider) does its own
-    crossfade *before* publishing — crossfade lives next to inference.
-
-    motor_controller can still invoke this function as a fallback by detecting
-    chunk transitions (step_index == 0 with a new chunk_id) and grouping the
-    tail of the previous chunk + the head of the new chunk. Off by default;
-    controlled by motor_params.yaml (chunk_size, crossfade_threshold_g) which
-    are kept as scaffold but unused unless NX-side crossfade is enabled.
+TODO(REQ-34, REQ-38) [TASK-34]: vectorise with numpy for jitter-free 20Hz.
 """
 from typing import List
 
 
 def crossfade(old_tail: List[List[float]],
               new_chunk: List[List[float]]) -> List[List[float]]:
-    """
-    Return the blended sequence to write into joint_buf.
+    """Return the blended sequence to write into joint_buf.
 
     `old_tail` is the remaining joint vectors from the previous chunk
-    (length = overlap). `new_chunk` is the incoming chunk
-    (length >= overlap). The first len(old_tail) entries of the result
-    are linearly weighted; the remainder is copied from `new_chunk`
-    unchanged.
+    (length = overlap). `new_chunk` (length >= overlap) is the incoming chunk.
+    First `overlap` entries are linearly weighted; remainder copied from new.
     """
     overlap = len(old_tail)
     if overlap == 0:
@@ -46,17 +36,11 @@ def crossfade(old_tail: List[List[float]],
         raise ValueError(
             f'new_chunk shorter than overlap: {len(new_chunk)} < {overlap}')
 
-    # TODO(REQ-34, REQ-38): vectorise with numpy for jitter-free 20Hz operation.
     blended: List[List[float]] = []
     for i in range(overlap):
         w = i / overlap
         old_v = old_tail[i]
         new_v = new_chunk[i]
-        # Defensive length check: zip() would silently truncate to the shorter
-        # side and quietly drop joints if the two chunks ever disagreed on
-        # joint count (e.g. cross-VLA version, partial set rewiring). Detect
-        # it here so the dispatcher can flag malformed input rather than
-        # publish a half-blended command.
         if len(old_v) != len(new_v):
             raise ValueError(
                 f'crossfade step {i}: joint-count mismatch '

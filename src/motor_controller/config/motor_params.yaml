@@ -1,55 +1,34 @@
-# motor_controller — runtime parameters
-# TODO(REQ-34, REQ-38): tune chunk_size and crossfade once VLA Provider timings are measured on PC.
+# motor_controller — runtime parameters. [TASK-34]
+# TODO(REQ-34, REQ-38) [TASK-34]: tune chunk_size / crossfade once VLA Provider timings measured.
 
 motor_controller:
   ros__parameters:
-    # ---------- Control loop ----------
-    control_rate_hz: 20            # 50 ms tick — matches VLA chunk step rate.
-                                   # G1 SDK rt/arm_sdk natively runs at 250 Hz; we publish
-                                   # at 20 Hz today (TODO(REQ-34, REQ-38): consider 250 Hz
-                                   # interpolation between VLA steps if motion looks jerky).
-    busy_wait_fraction: 0.2        # busy-wait the last 20% of each tick for low jitter
+    # Control loop (20 Hz tick = 50 ms; matches VLA chunk step rate)
+    control_rate_hz: 20            # rt/arm_sdk native 250 Hz; consider 250 Hz interp if jerky
+    busy_wait_fraction: 0.2        # last 20% of tick busy-wait for low jitter
 
-    # ---------- Ring buffer (action_queue) ----------
-    # NOTE: motor_controller_node.py currently hard-codes ActionQueue(slots=64);
-    # this yaml value is documentation-only until the param wiring lands
-    # (see TODO in motor_controller_node.__init__). Editing the number here
-    # has no runtime effect today.
+    # Ring buffer (action_queue)
+    # NOTE: motor_controller_node currently hard-codes ActionQueue(slots=64);
+    # this yaml value is documentation-only until param wiring lands.
     ring_buffer_slots: 64
 
-    # ---------- VLA action-chunk crossfade (joint_buf only, OPTIONAL) ----------
-    # 2026-05-16 (msg review option (a')): NX wire is step-by-step JointCmd;
-    # crossfade canonically lives at the producer (PC VLA). These params are
-    # scaffold for an NX-side fallback that detects chunk transitions via
-    # JointCmd.chunk_id / step_index and reuses queue_aggregate.crossfade().
-    # Disabled by default. velocity_buf is unaffected (LocoClient handles
-    # walking inertia itself).
-    chunk_size: 30                 # expected steps per chunk (informational)
-    crossfade_threshold_g: 0.7     # SmolVLA §3.3 "g" gating threshold — when |Δq| between
-                                   # consecutive chunks exceeds this, run crossfade overlap;
-                                   # below it, splice without blending. (TBD: confirm with
-                                   # VLA Provider integration; "g" stays as paper's notation.)
+    # VLA action-chunk crossfade (joint_buf only, OPTIONAL NX-side fallback).
+    # Canonical crossfade is at PC VLA Provider. Disabled by default.
+    chunk_size: 30                 # expected steps per chunk
+    crossfade_threshold_g: 0.7     # SmolVLA §3.3 "g" gating threshold (TBD)
 
-    # ---------- rt/arm_sdk blending (upper-body joints) ----------
-    # G1 SDK's motor_cmd[29].q acts as a weight between G1's internal motion controller
-    # and our user command (formula: actual = motion * (1 - weight) + user * weight).
-    arm_default_weight: 1.0        # nominal value once a JointCmd stream is active
-    arm_weight_ramp_steps: 101     # linspace points for the start-up / hand-back ramp
-    arm_weight_ramp_dt: 0.02       # seconds per step. linspace(0, 1, 101) yields 101
-                                   # points = 100 intervals × 20 ms = exactly 2.0 s.
-                                   # Verify np.linspace(endpoint=True) at implementation
-                                   # so the upper boundary (weight=1.0) is actually hit.
+    # rt/arm_sdk blending (motor_cmd[29].q = weight ∈ [0,1])
+    arm_default_weight: 1.0
+    arm_weight_ramp_steps: 101     # linspace(0, 1, 101) = 100 intervals × 20 ms = 2.0 s
+    arm_weight_ramp_dt: 0.02       # verify np.linspace(endpoint=True) at impl
 
-    # ---------- LocoCommand routing ----------
-    # Map of LocoCommand.action enum → method to call on unitree_sdk2_python LocoClient.
-    # TODO(REQ-34): finalise after a hands-on session with the SDK; some methods may need
-    # extra param plumbing (e.g. SwitchGait).
-    estop_loco_action: "Damp"      # what to call when an E-STOP triggers
-                                   # (LocoClient.Damp() in current Unitree SDK naming)
+    # LocoCommand routing — startup-validate via hasattr(loco_client, estop_loco_action)
+    # (yaml typo otherwise blows up on first E-STOP).
+    estop_loco_action: "Damp"
 
-    # ---------- G1 SDK transport ----------
+    # G1 SDK transport
     network_interface: "eth0"      # TBD: confirm against onboard wiring
     domain_id: 0
 
-    # ---------- E-STOP shared-memory flag (written by safety_monitor) ----------
+    # E-STOP shared-memory flag (written by safety_monitor)
     estop_shm_name: "safety_flag"
