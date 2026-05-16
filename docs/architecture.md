@@ -13,6 +13,7 @@ Authoritative spec lives in Notion. This file is a developer-facing summary.
 | Date | Change | Rationale |
 |---|---|---|
 | 2026-05-14 | SLAM/Nav2/LiDAR removed; UWB-only localisation; single `goto_node` replaces Nav2 stack; obstacle avoidance dropped (fixed demo environment); Camera Depth retained for safety proximity E-STOP only | Demo-driven simplification, time-saving (REQ-37 redefined) |
+| 2026-05-16 | nav_goal channel reverts to `std_msgs/String` named goal (e.g. `"refrigerator"`); NX `goto_node` owns `named_goals.yaml` lookup again. Reverts 2026-05-15 decision 5a. | One-line CLI debugging without standing up the PC stack |
 
 ---
 
@@ -79,5 +80,5 @@ G1 Onboard (Orin NX)                                  â†• Ethernet/CycloneDDS â†
 
 | Package | Build type | Reason |
 |---|---|---|
-| `kist_drl_g1_msgs` | `ament_cmake` | required for ROS IDL (.msg) code generation |
+| `g1_onboard_msgs` | `ament_cmake` | required for ROS IDL (.msg) code generation |
 | all others | `ament_python` | pure-Python nodes |

@@ -15,7 +15,7 @@ real-time safety, and motor execution.
 
 | Package | Build | Role |
 |---|---|---|
-| `kist_drl_g1_msgs` | `ament_cmake` | Custom interfaces (AudioPCM, …) |
+| `g1_onboard_msgs` | `ament_cmake` | Custom interfaces (AudioPCM, …) |
 | `sensors` | `ament_python` | RealSense Camera / IMU / Mic / JointState / **UWB** publishers |
 | `comm_bridge` | `ament_python` | `/onboard/` ↔ `/bridge/` topic relay + QoS conversion |
 | `navigation` | `ament_python` | UWB-based `goto_node` (P-controller, no Nav2 stack) |
@@ -53,8 +53,11 @@ See [docs/architecture.md](docs/architecture.md) for the data flow and topic nam
 - **Safety output split.** `safety_monitor` publishes two validated topics
   (`validated_twist` + `validated_joint`) instead of a single `validated_cmd`, plus
   `EstopFlag` on DDS and a POSIX shared-memory byte for the zero-latency stop path.
-- **Named goals: PC owns.** `goto_node` accepts `PoseStamped` only; PC resolves the
-  name → coordinates before publishing on `/bridge/cmd/nav_goal`.
+- **Named goals: NX owns the lookup table** (2026-05-16 revert of 5a). PC publishes the
+  human-readable name as `std_msgs/String` on `/bridge/cmd/nav_goal`; `goto_node`
+  resolves it via `named_goals.yaml` -> `(x, y, theta)`. Unknown names produce
+  `NavState.STATUS_FAILED`. Trade NX coupling for one-line CLI debugging
+  (`ros2 topic pub /bridge/cmd/nav_goal std_msgs/String "data: 'refrigerator'"`).
 
 ---
 
@@ -132,12 +135,12 @@ Command channels (2026-05-15 routing convention):
 
 | Topic | Type | Path |
 |---|---|---|
-| `/onboard/cmd/arm`  | `kist_drl_g1_msgs/JointCmd`    | upper-body via `rt/arm_sdk` (weight blending) |
-| `/onboard/cmd/loco` | `kist_drl_g1_msgs/LocoCommand` | discrete LocoClient actions (Damp / StandUp / ...) |
-| `/onboard/cmd/nav_goal` | `geometry_msgs/PoseStamped` | navigation target (PC resolves named goal first) |
+| `/onboard/cmd/arm`  | `g1_onboard_msgs/JointCmd`    | upper-body via `rt/arm_sdk` (weight blending) |
+| `/onboard/cmd/loco` | `g1_onboard_msgs/LocoCommand` | discrete LocoClient actions (Damp / StandUp / ...) |
+| `/onboard/cmd/nav_goal` | `std_msgs/String` | named goal key (e.g. `"refrigerator"`); goto_node looks up `named_goals.yaml` |
 | `/onboard/safety/validated_twist` | `geometry_msgs/Twist` | safety-gated walking command |
-| `/onboard/safety/validated_joint` | `kist_drl_g1_msgs/JointCmd` | safety-gated arm command |
-| `/onboard/safety/estop` | `kist_drl_g1_msgs/EstopFlag` | structured E-STOP event (DDS, PC-facing) |
+| `/onboard/safety/validated_joint` | `g1_onboard_msgs/JointCmd` | safety-gated arm command |
+| `/onboard/safety/estop` | `g1_onboard_msgs/EstopFlag` | structured E-STOP event (DDS, PC-facing) |
 | POSIX shm `safety_flag` | uint8 byte | zero-latency E-STOP (motor_controller polls every tick) |
 
 ---

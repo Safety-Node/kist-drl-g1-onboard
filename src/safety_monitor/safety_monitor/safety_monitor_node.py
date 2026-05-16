@@ -66,7 +66,7 @@ class SafetyMonitorNode(Node):
     # TODO(REQ-35): def _check_self_collision(self, target_q, current_q) -> tuple[bool, str]
     # TODO(REQ-35): def _check_rate_of_change(self, target_q, current_q) -> tuple[bool, str]
     # TODO(REQ-35): def _trigger_estop(self, reason: int, detail: str) -> None
-    #               reason uses kist_drl_g1_msgs.msg.EstopFlag.REASON_* constants;
+    #               reason uses g1_onboard_msgs.msg.EstopFlag.REASON_* constants;
     #               sets the SHM byte AND publishes EstopFlag on DDS.
 
 

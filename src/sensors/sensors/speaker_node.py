@@ -1,9 +1,9 @@
 """
 ALSA speaker playback subscriber + state publisher.
 
-Subscribes /onboard/sensors/audio/playback (kist_drl_g1_msgs/AudioPCM),
+Subscribes /onboard/sensors/audio/playback (g1_onboard_msgs/AudioPCM),
 pushes each chunk to the ALSA playback device at a fixed 16 kHz / 16-bit /
-mono pipeline rate, and emits kist_drl_g1_msgs/SpeakerState on
+mono pipeline rate, and emits g1_onboard_msgs/SpeakerState on
 /onboard/audio/speaker_state so the PC-side STT Provider can mute its
 input while we're playing.
 
@@ -32,7 +32,7 @@ class SpeakerNode(Node):
         # TODO(REQ-29): open ALSA playback handle (pyalsaaudio.PCM(PCM_PLAYBACK, ...))
         # TODO(REQ-29): create subscriber /onboard/sensors/audio/playback
         # TODO(REQ-29): create publisher /onboard/audio/speaker_state
-        #               (kist_drl_g1_msgs/SpeakerState)
+        #               (g1_onboard_msgs/SpeakerState)
         # TODO(REQ-29): spawn writer thread + chunk queue; emit SpeakerState on push/pop
         self.get_logger().info('speaker_node started (TBD)')
 

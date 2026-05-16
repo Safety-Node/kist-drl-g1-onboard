@@ -17,7 +17,7 @@
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>kist_drl_g1_msgs</depend>
+  <depend>g1_onboard_msgs</depend>
 
   <!-- External drivers launched from sensors.launch.py -->
   <!-- TODO(REQ-42): verify availability on target apt repos / build from source as fallback -->

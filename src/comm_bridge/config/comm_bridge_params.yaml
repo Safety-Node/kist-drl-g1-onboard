@@ -22,7 +22,7 @@ outbound_relay:
         qos:  "best_effort"
       - src:  "/onboard/sensors/audio/pcm"
         dst:  "/bridge/sensors/audio_pcm"
-        type: "kist_drl_g1_msgs/msg/AudioPCM"
+        type: "g1_onboard_msgs/msg/AudioPCM"
         qos:  "best_effort"
       - src:  "/onboard/sensors/joint_states"
         dst:  "/bridge/sensors/joint_states"
@@ -40,19 +40,19 @@ outbound_relay:
       # ---------- State reports (RELIABLE — don't drop transitions) ----------
       - src:  "/onboard/nav/state"
         dst:  "/bridge/nav/state"
-        type: "kist_drl_g1_msgs/msg/NavState"
+        type: "g1_onboard_msgs/msg/NavState"
         qos:  "reliable"
       - src:  "/onboard/motor/buf_state"
         dst:  "/bridge/motor/buf_state"
-        type: "kist_drl_g1_msgs/msg/BufState"
+        type: "g1_onboard_msgs/msg/BufState"
         qos:  "reliable"
       - src:  "/onboard/audio/speaker_state"
         dst:  "/bridge/audio/speaker_state"
-        type: "kist_drl_g1_msgs/msg/SpeakerState"
+        type: "g1_onboard_msgs/msg/SpeakerState"
         qos:  "reliable"
       - src:  "/onboard/safety/estop"
         dst:  "/bridge/safety/estop"
-        type: "kist_drl_g1_msgs/msg/EstopFlag"
+        type: "g1_onboard_msgs/msg/EstopFlag"
         qos:  "reliable"
 
 inbound_relay:
@@ -62,19 +62,21 @@ inbound_relay:
     relays:
       - src:  "/bridge/cmd/arm"
         dst:  "/onboard/cmd/arm"
-        type: "kist_drl_g1_msgs/msg/JointCmd"
+        type: "g1_onboard_msgs/msg/JointCmd"
         qos:  "reliable"
       - src:  "/bridge/cmd/loco"
         dst:  "/onboard/cmd/loco"
-        type: "kist_drl_g1_msgs/msg/LocoCommand"
+        type: "g1_onboard_msgs/msg/LocoCommand"
         qos:  "reliable"
       - src:  "/bridge/cmd/nav_goal"
         dst:  "/onboard/cmd/nav_goal"
-        type: "geometry_msgs/msg/PoseStamped"
+        type: "std_msgs/msg/String"
         qos:  "reliable"
+        # 2026-05-16: revert decision 5a -- NX accepts named goal text again
+        # (e.g. "refrigerator"). goto_node looks up named_goals.yaml -> coords.
       - src:  "/bridge/cmd/audio_out"
         dst:  "/onboard/audio/playback"
-        type: "kist_drl_g1_msgs/msg/AudioPCM"
+        type: "g1_onboard_msgs/msg/AudioPCM"
         qos:  "reliable"
 
       # NOTE: /bridge/cmd/low (rt/lowcmd debug path) not exposed yet (YAGNI).

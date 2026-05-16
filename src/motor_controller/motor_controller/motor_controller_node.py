@@ -51,7 +51,7 @@ class MotorControllerNode(Node):
         # TODO(REQ-34): init unitree_sdk2_python — LocoClient handle + rt/arm_sdk publisher
         #               (+ optional rt/lowcmd publisher behind a debug flag)
         # TODO(REQ-35): open shared-memory 'safety_flag' read-only
-        # TODO(REQ-34): create publisher /onboard/motor/buf_state (kist_drl_g1_msgs/BufState)
+        # TODO(REQ-34): create publisher /onboard/motor/buf_state (g1_onboard_msgs/BufState)
         # TODO(REQ-34): subscribe /onboard/safety/validated_twist (Twist) → velocity_buf
         # TODO(REQ-34): subscribe /onboard/safety/validated_joint (JointCmd) → joint_buf
         # TODO(REQ-35): subscribe /onboard/safety/estop (EstopFlag) — structured context

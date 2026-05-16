@@ -10,10 +10,12 @@
     so the full Nav2 stack (map_server / amcl / planner_server / controller_server /
     bt_navigator) was removed. This package now ships a single goto_node that:
       - subscribes to the UWB absolute pose from sensors/uwb_node,
-      - accepts target poses on /onboard/cmd/nav_goal (PoseStamped only — named-goal
-        resolution is owned by the PC side per the 2026-05-15 comm_bridge review),
+      - accepts a named goal key (std_msgs/String) on /onboard/cmd/nav_goal and looks
+        it up in named_goals.yaml -> (x, y, theta) in the UWB 'map' frame
+        (2026-05-16: reverted decision 5a -- NX owns the lookup again for
+        debugging convenience),
       - emits cmd_vel toward the target (P-controller) until within tolerance,
-      - reports nav state on /onboard/nav/state (kist_drl_g1_msgs/NavState).
+      - reports nav state on /onboard/nav/state (g1_onboard_msgs/NavState).
 
     The cmd_vel still flows through safety_monitor before reaching motor_controller.
   </description>
@@ -23,7 +25,7 @@
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>kist_drl_g1_msgs</depend>
+  <depend>g1_onboard_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
