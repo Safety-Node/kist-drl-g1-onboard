@@ -1,46 +1,27 @@
-# navigation / goto_node -- runtime parameters
-# TODO(REQ-37): tune gains and tolerances after first integration test.
-#
-# Note (2026-05-16): decision 5a reverted. NX accepts named goal text on
-# /onboard/cmd/nav_goal (std_msgs/String) and looks it up in named_goals.yaml.
-# PC just publishes the human-readable name for debugging convenience.
+# navigation / goto_node — runtime parameters. [TASK-35]
+# TODO(REQ-37) [TASK-35]: tune gains and tolerances after first integration test.
 
 goto_node:
   ros__parameters:
-    # Control loop
-    # Both rates declared as float so rclpy.declare_parameter sees a consistent
-    # DoubleType and `--ros-args -p update_rate_hz:=12.5` overrides work.
-    update_rate_hz: 10.0          # P-controller tick rate while MOVING
-    idle_publish_hz: 2.0          # zero-Twist heartbeat rate while state != MOVING.
-                                  # Feeds safety_monitor's cmd_vel_timeout_s
-                                  # watchdog (2.0 s) -- chosen 2 Hz so a single
-                                  # missed heartbeat does not trip the watchdog.
+    # Control loop (both rates float — rclpy DoubleType consistency for overrides)
+    update_rate_hz: 10.0          # P-controller tick while MOVING
+    idle_publish_hz: 2.0          # zero-Twist heartbeat when state != MOVING
+                                  # (safety_monitor cmd_vel_timeout_s = 2.0)
 
-    # P-controller gains (linear: m/s per metre, angular: rad/s per radian)
-    kp_linear: 0.6                # TBD
-    kp_angular: 0.0               # RESERVED, currently unused (2026-05-16 review #1)
-                                  # UWB gives no yaw, so the P-controller emits no
-                                  # angular cmd. Keep the param so a future IMU
-                                  # fusion node can reactivate yaw control by
-                                  # editing this single value -- no code change.
+    # P-controller gains
+    kp_linear: 0.6                # m/s per metre — TBD
+    kp_angular: 0.0               # RESERVED — UWB has no yaw source (no angular cmd)
 
-    # Saturation (must stay within safety_monitor velocity limits)
-    max_linear_speed: 0.5         # m/s   (per-axis clamp -- see goto_node.py _step TODO)
-    max_angular_speed: 0.8        # rad/s (RESERVED with kp_angular)
+    # Saturation (must stay within safety_monitor limits; per-axis clamp)
+    max_linear_speed: 0.5         # m/s
+    max_angular_speed: 0.8        # rad/s — RESERVED with kp_angular
 
-    # Tolerances for "goal reached"
+    # Tolerances
     position_tolerance: 0.15      # m
-    yaw_tolerance: 0.15           # rad (~ 8.6 deg) -- RESERVED, currently unused.
-                                  # Kept for schema stability; reactivated together
-                                  # with kp_angular when yaw becomes observable.
+    yaw_tolerance: 0.15           # rad — RESERVED with kp_angular
 
     # Watchdog
-    uwb_timeout_s: 1.0            # if UWB pose stale > this, halt and report FAILED.
-                                  # Recovery policy: STATUS_FAILED is sticky --
-                                  # a new nav_goal is required after UWB returns
-                                  # (no auto-resume; keeps the PC trace honest).
+    uwb_timeout_s: 1.0            # UWB stale → halt + FAILED (sticky; no auto-resume)
 
-    # Named-goal lookup table (relative to share/<pkg>/config/)
-    # Loaded directly via yaml.safe_load (NOT via ROS parameters -- dict-of-dict
-    # doesn't survive declare_parameter). Missing keys -> NavState.STATUS_FAILED.
+    # Named-goal lookup table — load via yaml.safe_load directly (dict-of-dict).
     named_goals_file: "named_goals.yaml"
