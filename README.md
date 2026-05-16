@@ -145,6 +145,44 @@ Command channels (2026-05-15 routing convention):
 
 ---
 
+## Contributing
+
+Branch protection enforces these conventions on every PR — set them up locally
+to avoid CI red.
+
+**Branch name** — `TASK-{number}[-kebab-description]`
+```
+TASK-42                          # ok
+TASK-42-add-uwb-driver           # ok
+feature/uwb                      # rejected
+```
+
+**PR title** — [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+```
+feat(sensors): add UWB vendor SDK driver           # ok
+fix(motor): clear ring buffer on E-STOP            # ok
+docs: update topic naming table                    # ok (no scope)
+Add UWB driver                                     # rejected (no type, capital)
+```
+
+Allowed types: `feat fix docs style refactor perf test build ci chore revert`.
+Recommended scopes: `sensors comm_bridge navigation safety motor msgs infra docs`.
+
+Repo is configured for **squash-merge only**, so the PR title becomes the
+commit on `main` — local commit messages stay free-form. Required CI checks:
+
+| Check | Source |
+|---|---|
+| `colcon build + test (ROS 2 humble)` | `.github/workflows/ci.yml` |
+| `Validate branch name (TASK-{number})` | `.github/workflows/pr-meta.yml` |
+| `Validate PR title (Conventional Commits)` | `.github/workflows/pr-meta.yml` |
+
+CI uses apt + ccache + colcon caching (~3-5 min cold → ~1-2 min warm). The colcon
+cache keys on `package.xml` / `CMakeLists.txt` / `*.py` / `*.msg` / `*.yaml` hashes,
+so unchanged packages skip rebuild — incremental build in CI by hash.
+
+---
+
 ## Status
 
 🚧 **Scaffold only.** Every node body and config file currently contains `TODO(REQ-XX)`

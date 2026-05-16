@@ -1,0 +1,73 @@
+# PR meta gate -- enforces branch naming + Conventional Commits PR title.
+#
+# Pairs with the repo's "Squash and merge only" setting: the PR title becomes
+# the squash commit message on main, so enforcing it here gives us a clean
+# history without dictating individual local commit messages.
+#
+# Required status checks (in branch protection):
+#   - Validate branch name (TASK-{number})
+#   - Validate PR title (Conventional Commits)
+name: PR meta
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  branch-name:
+    name: Validate branch name (TASK-{number})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check pattern
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          if [[ ! "$BRANCH" =~ ^TASK-[0-9]+(-[a-z0-9._-]+)?$ ]]; then
+            echo "::error::Branch name '$BRANCH' must match TASK-{number}[-kebab-description]"
+            echo ""
+            echo "Examples that pass:"
+            echo "  TASK-42"
+            echo "  TASK-42-add-uwb-driver"
+            echo "  TASK-7-fix-estop-watchdog"
+            echo ""
+            echo "Examples that fail:"
+            echo "  feature/uwb           (wrong prefix)"
+            echo "  TASK-Add-UWB          (no number, uppercase)"
+            echo "  task-42               (lowercase 'task')"
+            exit 1
+          fi
+          echo "Branch name OK: $BRANCH"
+
+  pr-title:
+    name: Validate PR title (Conventional Commits)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Conventional Commits
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Allowed types -- https://www.conventionalcommits.org/en/v1.0.0/
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          # Scope is optional but recommended -- one of:
+          #   sensors, comm_bridge, navigation, safety, motor, msgs, infra, docs
+          requireScope: false
+          # Subject must start with a lowercase letter (Conventional Commits convention).
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The PR title subject must start with a lowercase letter.
+              Bad : feat(sensors): Add UWB driver
+              Good: feat(sensors): add UWB driver
+          # Pass if the action sees a valid title -- skips noisy work-in-progress markers.
+          wip: true

@@ -18,15 +18,62 @@ jobs:
     container:
       image: ros:${{ matrix.ros_distro }}-ros-base
 
+    # Container runs as root; pin ccache dir explicitly so the cache action and
+    # the compiler agree on the path (no ~ expansion surprises).
+    env:
+      CCACHE_DIR: /root/.ccache
+      CCACHE_COMPRESS: "1"
+      CCACHE_MAXSIZE: "500M"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ----------------------------------------------------------------
+      # Caches -- typical wall-clock impact on a hit:
+      #   apt cache       ~60s saved (skip re-downloading .deb files)
+      #   ccache          ~30-60s saved (g1_onboard_msgs C++ codegen)
+      #   colcon cache    ~30-90s saved (unchanged packages skip build)
+      # Total: clean run ~3-5min  ->  warm run ~1-2min.
+      # ----------------------------------------------------------------
+      - name: Cache apt archives
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ matrix.ros_distro }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-${{ matrix.ros_distro }}-
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: /root/.ccache
+          # SHA in the key forces a write each commit; restore-keys lets any
+          # earlier ccache from this distro seed the next build.
+          key: ccache-${{ matrix.ros_distro }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.ros_distro }}-
+
+      - name: Cache colcon build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            install
+            log
+          # Hash anything that affects build outputs. If a Python/CMake/msg/
+          # package.xml file changes, that package (and its dependents) rebuild;
+          # everything else is reused. This is our incremental-build mechanism in CI.
+          key: colcon-${{ matrix.ros_distro }}-${{ hashFiles('src/**/package.xml', 'src/**/CMakeLists.txt', 'src/**/*.py', 'src/**/*.msg', 'src/**/*.yaml') }}
+          restore-keys: |
+            colcon-${{ matrix.ros_distro }}-
 
       - name: Install build tooling
         shell: bash
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
+            ccache \
             python3-colcon-common-extensions \
             python3-rosdep \
             python3-pytest \
@@ -47,9 +94,15 @@ jobs:
 
       - name: colcon build
         shell: bash
+        env:
+          # Route C/C++ through ccache wrappers (only matters for ament_cmake
+          # packages, currently g1_onboard_msgs).
+          CC: /usr/lib/ccache/gcc
+          CXX: /usr/lib/ccache/g++
         run: |
           source /opt/ros/${{ matrix.ros_distro }}/setup.bash
           colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          ccache --show-stats || true
 
       - name: colcon test
         shell: bash
