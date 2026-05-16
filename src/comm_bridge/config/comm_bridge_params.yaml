@@ -1,7 +1,9 @@
-# comm_bridge — relay table for inbound + outbound relays.
-# Schema per entry: {src, dst, type, qos: best_effort|reliable}.
-# See container page for routing convention, QoS policy, audio_out / lowcmd plans:
-#   https://www.notion.so/comm_bridge-355b39de7dd781d1b207f006610c3906
+# comm_bridge — relay table {src, dst, type, qos: best_effort|reliable}.
+# Routing: /bridge/cmd/{arm, loco, nav_goal, audio_out} inbound;
+#          /bridge/{sensors/*, nav/state, motor/buf_state,
+#                   audio/speaker_state, safety/estop} outbound.
+# QoS rule of thumb: sensor → best_effort (freshness wins),
+#                    state/command → reliable (don't drop transitions).
 #
 # TODO(REQ-32) [TASK-28]: finalise after /bridge/ schema is locked.
 
