@@ -1,67 +1,32 @@
-# safety_monitor — runtime safety parameters
-# TODO(REQ-35): fill all limits from the G1 SDK joint specification and a kinematics review.
+# safety_monitor — runtime safety parameters. [TASK-33]
+# TODO(REQ-35) [TASK-33]: fill all limits from G1 SDK joint spec + kinematics review.
 
 safety_monitor:
   ros__parameters:
-    # Loop control
-    loop_rate_hz: 100        # 10 ms tick — well under the 200 ms E-STOP budget
-
-    # E-STOP shared-memory channel (read by motor_controller every control tick)
+    # Loop
+    loop_rate_hz: 100              # 10 ms tick (well under 200 ms E-STOP budget)
     estop_shm_name: "safety_flag"
+    estop_heartbeat_hz: 1.0        # EstopFlag DDS heartbeat (ICD lock)
 
-    # EstopFlag DDS heartbeat (Reliable topic — keeps PC subscriber alive
-    # even when the latched `active` flag has not changed). Matches the ICD
-    # entry "EstopFlag (Onboard→PC)" specifying 1 Hz heartbeat.
-    estop_heartbeat_hz: 1.0
+    # Velocity limits on cmd_vel (Twist)
+    max_linear_x: 0.8              # m/s   — TBD
+    max_linear_y: 0.5              # m/s   — TBD
+    max_angular_z: 1.0             # rad/s — TBD
 
-    # Velocity limits (cmd_vel.Twist on /onboard/navigation/cmd_vel)
-    max_linear_x: 0.8        # m/s   — TBD
-    max_linear_y: 0.5        # m/s   — TBD
-    max_angular_z: 1.0       # rad/s — TBD
+    # Proximity E-STOP (RealSense Depth only; LiDAR removed 2026-05-14)
+    proximity_min_dist_m: 0.30
+    proximity_depth_pixel_thresh: 50    # WARNING: absolute count, assumes 1280×720
+                                        # depth. Rescale if profile changes.
 
-    # Proximity E-STOP via RealSense Depth only (LiDAR removed 2026-05-14).
-    proximity_min_dist_m: 0.30          # any depth pixel closer than this counts as "near"
-    proximity_depth_pixel_thresh: 50    # trigger E-STOP if more than this many "near" pixels
-                                        # in the frustum.
-                                        # CAVEAT (decided 2026-05-16, review #4):
-                                        # 50 pixels is an absolute count that assumes the
-                                        # depth frame is 1280×720 (current sensors_params.yaml).
-                                        # 50 / 921600 ≈ 0.005% of frame -- if the depth
-                                        # profile changes (e.g. 640×360 to cut bandwidth)
-                                        # this number must be rescaled or the proximity
-                                        # check loses sensitivity.
-                                        # TODO(REQ-35): migrate to a resolution-independent
-                                        #               fraction (proximity_depth_frac_thresh)
-                                        #               and/or a frustum ROI (front cone
-                                        #               bounds) once depth profile is final.
-
-    # Comms watchdog — emit EstopFlag.REASON_COMMS_TIMEOUT when a command
-    # stream goes silent for longer than its dedicated window.
-    # Per-stream (decided 2026-05-16, review #2): different streams have
-    # different legitimate idle envelopes, so a single comms_timeout_s
-    # was too coarse:
-    #   - cmd_vel  : zero-Twist while BalanceStand idle is normal -> allow >1 s silence.
-    #   - cmd/arm  : VLA-driven; silence > 0.5 s means inference stalled or producer died.
-    # State streams (joint_states, depth) get their own staleness check
-    # via state_staleness_s (see safety_monitor_node.py TODO).
+    # Comms watchdog (per-stream — cmd_vel idle is legitimate, cmd/arm idle is not)
     cmd_vel_timeout_s: 2.0
     cmd_arm_timeout_s: 0.5
 
-    # Joint rate-of-change limit (rad/tick at loop_rate_hz).
-    # NOTE (review #1, 2026-05-16): single scalar is INTENTIONAL for the demo.
-    # G1 joints have heterogeneous allowed step sizes (finger << hip), so a
-    # scalar must be set conservatively (= slow joints bound the fast ones)
-    # or aggressively (= fast joints unsafe). For the demo arm-manipulation
-    # scope a single conservative value is enough; promote to per-joint
-    # before any non-demo deployment.
-    # TODO(REQ-35): replace with a 5th field in joint_limits ([q_min, q_max,
-    #               dq_max, tau_max, dq_per_tick_max]) once limits are real.
-    joint_rate_of_change_limit: 0.20
+    # Joint rate-of-change (single scalar intentional for demo;
+    # promote to per-joint 5th field of joint_limits before deployment)
+    joint_rate_of_change_limit: 0.20    # rad/tick at loop_rate_hz
 
-    # Joint command bounds — TBD: populate per joint from G1 SDK.
-    # This is a dict-of-list (anchor-style); load via
-    # `self.get_parameters_by_prefix('joint_limits')` -- declare_parameter()
-    # cannot enumerate dynamic keys. See sensors/uwb_node.py for the same pattern.
+    # Joint command bounds — dict-of-list; load via get_parameters_by_prefix('joint_limits').
     joint_limits:
       # joint_name: [q_min, q_max, dq_max, tau_max]
       placeholder_joint: [-1.57, 1.57, 2.0, 30.0]
