@@ -5,8 +5,8 @@
 # history without dictating individual local commit messages.
 #
 # Required status checks (in branch protection):
-#   - Validate branch name (TASK-{number})
-#   - Validate PR title (Conventional Commits)
+#   - branch-name
+#   - pr-title
 name: PR meta
 
 on:
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   branch-name:
-    name: Validate branch name (TASK-{number})
+    name: branch-name
     runs-on: ubuntu-latest
     steps:
       - name: Check pattern
@@ -46,7 +46,7 @@ jobs:
           echo "Branch name OK: $BRANCH"
 
   pr-title:
-    name: Validate PR title (Conventional Commits)
+    name: pr-title
     runs-on: ubuntu-latest
     steps:
       - name: Check Conventional Commits

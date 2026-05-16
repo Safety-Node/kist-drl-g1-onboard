@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  colcon-build:
-    name: colcon build + test (ROS 2 ${{ matrix.ros_distro }})
+  build:
+    name: build (${{ matrix.ros_distro }})
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
