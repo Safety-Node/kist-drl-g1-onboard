@@ -37,9 +37,15 @@ float64[] tau_ff     # feed-forward torque (Nm)
 # rejects with EstopFlag.REASON_MALFORMED_CMD.
 
 # Execution mode
-uint8 MODE_POSITION = 0    # use q + kp/kd, ignore tau_ff
-uint8 MODE_TORQUE   = 1    # use tau_ff only
-uint8 MODE_HYBRID   = 2    # use all of q, dq, kp, kd, tau_ff
+#   POSITION = PD on (q, dq) with kp/kd, no feed-forward.
+#   HYBRID   = PD on (q, dq) with kp/kd, plus tau_ff feed-forward torque.
+#   TORQUE   = pure torque (tau_ff), PD inputs (q, dq, kp, kd) ignored.
+# dq is the velocity reference for the PD law in POSITION and HYBRID
+# (G1 SDK rt/arm_sdk computes tau = kp*(q* - q) + kd*(dq* - dq) + tau_ff
+# with tau_ff = 0 in POSITION).
+uint8 MODE_POSITION = 0    # use q, dq, kp, kd; ignore tau_ff
+uint8 MODE_TORQUE   = 1    # use tau_ff only; ignore q, dq, kp, kd
+uint8 MODE_HYBRID   = 2    # use q, dq, kp, kd, tau_ff (PD + feed-forward)
 
 uint8 mode
 
@@ -58,12 +64,16 @@ uint8 mode
 # Default (zero-initialised) means "let motion controller drive" — VLA Provider
 # MUST set this to 1.0 explicitly for any meaningful arm motion.
 #
+# Out-of-range values (weight outside [0.0, 1.0]) are malformed and trigger
+# EstopFlag.REASON_MALFORMED_CMD at safety_monitor.
+#
 # MODE_TORQUE × weight policy (decided 2026-05-16):
 #   weight is a position-blending concept (rt/arm_sdk linear-interpolates the
 #   target position). It is undefined for pure-torque control. motor_controller
 #   FORCES weight = 1.0 internally when mode == MODE_TORQUE, regardless of the
 #   sender value. Senders SHOULD leave weight at 1.0 with MODE_TORQUE; values
-#   other than 1.0 are silently coerced.
+#   other than 1.0 are silently coerced (not flagged as malformed -- weight is
+#   simply unused in that mode).
 float32 weight
 
 # ---------- Chunk metadata (option (a') wire) ----------
@@ -72,7 +82,11 @@ float32 weight
 # scripted demos, CLI debug `ros2 topic pub`) leave both fields at 0.
 #
 #   chunk_id == 0 : "no chunk context" (single-shot or continuous stream)
-#   chunk_id != 0 : monotonically-increasing per producer, wraps on uint32 max
+#   chunk_id != 0 : monotonically-increasing per producer. On wraparound the
+#                   value SKIPS 0 (goes from 2^32-1 -> 1) to preserve the
+#                   sentinel meaning of chunk_id == 0. At 1.5 s per chunk this
+#                   takes ~204 years, but the skip rule is cheap insurance
+#                   against producers that mistakenly increment per-step.
 #   step_index    : 0-based index within the chunk (0 = chunk start)
 #
 # motor_controller may use (step_index == 0) to detect chunk boundaries and

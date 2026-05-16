@@ -8,7 +8,13 @@ std_msgs/Header header
 float32 velocity_fill        # velocity_buf fill ratio, 0.0–1.0
 float32 joint_fill           # joint_buf    fill ratio, 0.0–1.0
 float32 control_rate_hz      # measured loop frequency (target: 20.0)
-uint32  last_cmd_age_ms      # ms since the most recent JointCmd landed (any producer).
+uint32  last_cmd_age_ms      # ms since the most recent JointCmd was popped from
+                             # joint_buf -- i.e. JointCmd freshness on the
+                             # /onboard/safety/validated_joint stream, regardless
+                             # of upstream sender (VLA, teleop, scripted, CLI).
+                             # Velocity command freshness on validated_twist is
+                             # NOT tracked here; add a separate last_velocity_
+                             # cmd_age_ms field if that ever becomes useful.
                              # Renamed from last_chunk_age_ms (2026-05-16): wire is
                              # step-by-step now, "last cmd" is the meaningful health
                              # signal; chunk-specific aging would only matter for
