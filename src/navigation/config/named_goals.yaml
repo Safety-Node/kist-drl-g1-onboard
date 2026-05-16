@@ -6,22 +6,32 @@
 # named-goal lookup again so the PC side can publish ergonomic strings
 # like "refrigerator" for debugging convenience (vs. typing coordinates).
 #
-# TODO(REQ-30): populate from the UWB anchor survey of the actual demo space.
+# theta semantics (2026-05-16 navigation review #1, #9):
+#   theta is RESERVED. UWB has no yaw source on NX today, so goto_node
+#   ignores the field and treats every goal as position-only. Listed
+#   values are placeholders -- `null` is used (rather than 0.0) so a real
+#   surveyed value of 0.0 stays distinguishable from "not measured yet".
+#   The field stays in the schema so a future IMU-fusion node can fill
+#   it without breaking this yaml or NavState.msg.
+#
+# TODO(REQ-30): populate x / y from the UWB anchor survey of the actual
+#               demo space (kitchen with fridge, sink, prep table, home).
+#               Leave theta: null until yaw becomes observable.
 
 named_goals:
   refrigerator:
-    x: 0.0      # TBD (m, map frame)
-    y: 0.0      # TBD
-    theta: 0.0  # TBD (rad)
+    x: 0.0       # TBD (m, map frame)
+    y: 0.0       # TBD
+    theta: null  # RESERVED -- see header
   sink:
-    x: 0.0      # TBD
-    y: 0.0
-    theta: 0.0
+    x: 0.0       # TBD
+    y: 0.0       # TBD
+    theta: null  # RESERVED
   prep_table:
-    x: 0.0      # TBD
-    y: 0.0
-    theta: 0.0
+    x: 0.0       # TBD
+    y: 0.0       # TBD
+    theta: null  # RESERVED
   home:
-    x: 0.0
-    y: 0.0
-    theta: 0.0
+    x: 0.0       # TBD
+    y: 0.0       # TBD
+    theta: null  # RESERVED

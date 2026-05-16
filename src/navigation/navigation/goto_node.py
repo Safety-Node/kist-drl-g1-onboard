@@ -21,6 +21,28 @@ is sufficient:
         cmd_vel = clip(Kp * err, +/- v_max)
         publish cmd_vel  # -> safety_monitor -> motor_controller
 
+Yaw handling (decided 2026-05-16, navigation review #1):
+  UWB hardware gives reliable (x, y) but no yaw, and uwb_node publishes
+  identity quaternion to make that explicit. goto_node therefore IGNORES
+  yaw on the demo path:
+    - kp_angular is set to 0.0 in goto_params.yaml (P-controller emits no
+      angular command).
+    - yaw_tolerance / NavState.yaw_error_rad / named_goals[*].theta are
+      preserved as "reserved" fields so the schema does not change when a
+      future IMU-fusion node fills the quaternion. yaw_error_rad reports 0.0.
+    - On reaching position tolerance, motor_controller's BalanceStand
+      posture decides the final heading (good enough for the named-goal
+      kitchen demo).
+  Reactivating yaw control is a one-yaml-edit + property remap once a
+  fusion node lands; no code in this file needs to change.
+
+Idle cadence (decided 2026-05-16, navigation review #2):
+  safety_monitor enforces cmd_vel_timeout_s on /onboard/navigation/cmd_vel.
+  goto_node publishes a zero-Twist heartbeat at idle_publish_hz whenever
+  state != MOVING so the watchdog stays quiet during IDLE / REACHED /
+  FAILED / CANCELED. The heartbeat is harmless downstream (motor_controller
+  deadbands near-zero Twists per its own TODO).
+
 Inputs:
 - /onboard/sensors/uwb/pose   (PoseStamped)  current absolute pose
 - /onboard/cmd/nav_goal       (String)       named goal key (e.g. "refrigerator")
@@ -28,6 +50,19 @@ Inputs:
 Outputs:
 - /onboard/navigation/cmd_vel (Twist)        to safety_monitor
 - /onboard/nav/state          (NavState)     IDLE/MOVING/REACHED/FAILED/CANCELED
+
+State machine summary:
+  IDLE ---nav_goal known---> MOVING --at_goal--> REACHED
+   ^                          | uwb_stale         |
+   |                          v                   |
+   +--new nav_goal--- CANCELED <--new nav_goal---+
+   |                          |                   |
+   FAILED <--uwb_stale--------+                   |
+   (does NOT auto-resume; new nav_goal required)
+
+  CANCELED here means "preempted by a new nav_goal", not an external cancel
+  request -- there is no /onboard/cmd/nav_cancel topic by design. External
+  cancellation flows through safety_monitor E-STOP. See NavState.msg.
 """
 import rclpy
 from rclpy.node import Node
@@ -37,26 +72,63 @@ class GotoNode(Node):
     def __init__(self) -> None:
         super().__init__('goto_node')
 
-        # TODO(REQ-37): declare params (update_rate_hz, kp_linear, kp_angular,
-        #               max_linear_speed, max_angular_speed, position_tolerance,
-        #               yaw_tolerance, uwb_timeout_s, named_goals_file)
+        # TODO(REQ-37): declare params (update_rate_hz, idle_publish_hz,
+        #               kp_linear, kp_angular, max_linear_speed, max_angular_speed,
+        #               position_tolerance, yaw_tolerance, uwb_timeout_s,
+        #               named_goals_file)
         # TODO(REQ-30): load named_goals.yaml from share/navigation/config/
-        #               into a dict {name: (x, y, theta)} at startup
+        #               via `yaml.safe_load(open(path))` directly, NOT via ROS
+        #               parameters. The schema is dict-of-dict
+        #               ({name: {x, y, theta}}) which declare_parameter cannot
+        #               carry as a single value -- same trap that bit
+        #               comm_bridge's relay table. Result: {name: (x, y, theta)}
+        #               in-memory dict at startup.
         # TODO(REQ-37): subscribe /onboard/sensors/uwb/pose (geometry_msgs/PoseStamped)
         # TODO(REQ-30, REQ-37): subscribe /onboard/cmd/nav_goal (std_msgs/String)
         # TODO(REQ-37): publisher /onboard/navigation/cmd_vel (geometry_msgs/Twist)
         # TODO(REQ-30): publisher /onboard/nav/state (g1_onboard_msgs/NavState)
-        # TODO(REQ-37): timer at update_rate_hz running the P-controller step
+        # TODO(REQ-37): main timer at update_rate_hz running _step() when MOVING,
+        #               and a separate idle_publish_hz timer publishing zero-Twist
+        #               whenever state != MOVING (safety_monitor watchdog feed).
 
         self.get_logger().info('goto_node started (TBD)')
 
     # TODO(REQ-37): def _on_uwb_pose(self, msg)  -- cache latest pose + timestamp
-    # TODO(REQ-30): def _on_nav_goal(self, msg)  -- look up msg.data in named_goals;
+    # TODO(REQ-30): def _on_nav_goal(self, msg)
     #               unknown name -> publish NavState(FAILED, "unknown goal '<name>'");
-    #               known name -> store (x, y, theta), transition to MOVING (preempts)
-    # TODO(REQ-37): def _step(self)              -- P-controller tick, publish cmd_vel
-    # TODO(REQ-37): def _at_goal(self) -> bool   -- position + yaw tolerance check
-    # TODO(REQ-37): def _halt(self, reason)      -- publish zero Twist + NavState
+    #               known name with state == MOVING (preemption case) ->
+    #                 publish NavState(CANCELED, "preempted by '<new>'") for the
+    #                 OLD goal first, then NavState(MOVING, ...) for the new goal.
+    #                 Two NavState messages, in that order, so the PC trace
+    #                 stays continuous.
+    #               known name otherwise -> store (x, y, theta) and transition
+    #                 to MOVING.
+    # TODO(REQ-37): def _step(self)
+    #               1. if (now - last_uwb_stamp) > uwb_timeout_s:
+    #                       _halt("uwb_timeout") -- emit FAILED, NOT auto-resume.
+    #                       New nav_goal is required after UWB recovers; the
+    #                       PC must explicitly retry. Avoids "surprising resume"
+    #                       in the PC trace.
+    #               2. else: P-controller tick.
+    #                       cmd_vel.linear.x  = clip(kp_linear  * err.x, +/- max_linear_speed)
+    #                       cmd_vel.linear.y  = clip(kp_linear  * err.y, +/- max_linear_speed)
+    #                       cmd_vel.angular.z = 0.0   (yaw drop -- review #1)
+    #                       Per-axis clamp (NOT magnitude clamp) means the
+    #                       combined speed on a diagonal is up to
+    #                       sqrt(2) * max_linear_speed; still within
+    #                       safety_monitor's max_linear_x/y limits which are
+    #                       enforced per-axis as well. Acceptable for demo.
+    # TODO(REQ-37): def _at_goal(self) -> bool
+    #               Position tolerance only. yaw_tolerance is reserved and
+    #               currently ignored (see module docstring).
+    # TODO(REQ-37): def _halt(self, reason)
+    #               Publish zero-Twist immediately + NavState (FAILED with
+    #               `error_message=reason`). The idle timer then keeps the
+    #               heartbeat alive.
+    # TODO(REQ-37): def _publish_idle_heartbeat(self)
+    #               Called from the idle timer at idle_publish_hz whenever
+    #               state != MOVING. Publishes zero Twist so safety_monitor's
+    #               cmd_vel_timeout_s watchdog stays quiet.
 
 
 def main(args=None) -> None:

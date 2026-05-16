@@ -8,23 +8,37 @@
 goto_node:
   ros__parameters:
     # Control loop
-    update_rate_hz: 10            # publish cmd_vel at this rate
+    update_rate_hz: 10            # P-controller tick rate while MOVING
+    idle_publish_hz: 2.0          # zero-Twist heartbeat rate while state != MOVING.
+                                  # Feeds safety_monitor's cmd_vel_timeout_s
+                                  # watchdog (2.0 s) -- chosen 2 Hz so a single
+                                  # missed heartbeat does not trip the watchdog.
 
     # P-controller gains (linear: m/s per metre, angular: rad/s per radian)
     kp_linear: 0.6                # TBD
-    kp_angular: 1.5               # TBD
+    kp_angular: 0.0               # RESERVED, currently unused (2026-05-16 review #1)
+                                  # UWB gives no yaw, so the P-controller emits no
+                                  # angular cmd. Keep the param so a future IMU
+                                  # fusion node can reactivate yaw control by
+                                  # editing this single value -- no code change.
 
     # Saturation (must stay within safety_monitor velocity limits)
-    max_linear_speed: 0.5         # m/s
-    max_angular_speed: 0.8        # rad/s
+    max_linear_speed: 0.5         # m/s   (per-axis clamp -- see goto_node.py _step TODO)
+    max_angular_speed: 0.8        # rad/s (RESERVED with kp_angular)
 
     # Tolerances for "goal reached"
     position_tolerance: 0.15      # m
-    yaw_tolerance: 0.15           # rad (~ 8.6 deg)
+    yaw_tolerance: 0.15           # rad (~ 8.6 deg) -- RESERVED, currently unused.
+                                  # Kept for schema stability; reactivated together
+                                  # with kp_angular when yaw becomes observable.
 
     # Watchdog
-    uwb_timeout_s: 1.0            # if UWB pose stale > this, halt and report FAILED
+    uwb_timeout_s: 1.0            # if UWB pose stale > this, halt and report FAILED.
+                                  # Recovery policy: STATUS_FAILED is sticky --
+                                  # a new nav_goal is required after UWB returns
+                                  # (no auto-resume; keeps the PC trace honest).
 
     # Named-goal lookup table (relative to share/<pkg>/config/)
-    # Loaded at startup; missing keys -> NavState.STATUS_FAILED with error message.
+    # Loaded directly via yaml.safe_load (NOT via ROS parameters -- dict-of-dict
+    # doesn't survive declare_parameter). Missing keys -> NavState.STATUS_FAILED.
     named_goals_file: "named_goals.yaml"
