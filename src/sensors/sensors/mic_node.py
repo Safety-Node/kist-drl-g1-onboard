@@ -29,6 +29,12 @@ class MicNode(Node):
         # TODO(REQ-42, REQ-27): create publisher /onboard/sensors/audio/pcm
         #                       (g1_onboard_msgs/AudioPCM)
         # TODO(REQ-42, REQ-27): timestamp each chunk and tag sample_rate / channels / bit_depth
+        # TODO(REQ-42, REQ-27): pack ALSA's int16 frames into AudioPCM.data via
+        #                       np.asarray(frames, dtype=np.int16).tobytes() --
+        #                       little-endian native on x86_64 / aarch64 matches
+        #                       the AudioPCM contract ("signed LE int16 packed
+        #                       into uint8[]"). Verify endianness explicitly if
+        #                       this ever runs on a big-endian platform.
         self.get_logger().info('mic_node started (TBD)')
 
 

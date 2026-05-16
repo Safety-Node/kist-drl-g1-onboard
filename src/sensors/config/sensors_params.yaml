@@ -15,6 +15,11 @@ speaker_node:
     playback_device: "default"    # TBD: e.g. "hw:CARD=Speaker,DEV=0"
     sample_rate: 16000            # FIXED — must match mic_node and AudioPCM contract
     channels: 1                   # mono
+    max_queue_depth: 50           # cap for the internal playback queue. Must stay
+                                  # < 256 because SpeakerState.queue_depth is uint8.
+                                  # Overflow policy: drop OLDEST (TTS favours
+                                  # recency -- a stale system prompt mid-playback
+                                  # is worse than the latest message landing on time).
 
 # G1 SDK lowstate fan-out — joint encoders + body IMU on the same channel.
 joint_state_node:
@@ -49,9 +54,16 @@ uwb_node:
 
     # Frame conventions
     frame_id: "map"                # UWB returns absolute coordinates in 'map' frame
-    child_frame_id: "base_link"
+    child_frame_id: "base_link"    # reserved -- no TF broadcast today (2026-05-16:
+                                   # uwb_node publishes PoseStamped only; see
+                                   # uwb_node.py module docstring). Kept for the
+                                   # day a fusion node (UWB + IMU) is added.
 
-    # Anchor calibration — TBD: populate after site survey
+    # Anchor calibration — TBD: populate after site survey.
+    # Trilateration needs >= 3 non-collinear anchors. The placeholder below is
+    # a dev-only stub paired with transport: "stub" (returns zero pose). Real
+    # deployment must replace this with the surveyed map-frame coordinates of
+    # every anchor in the demo room.
     anchors:
       # anchor_id: [x, y, z]  in metres, map frame
       placeholder_anchor_0: [0.0, 0.0, 2.5]

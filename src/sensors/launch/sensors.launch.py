@@ -11,10 +11,14 @@ Composition:
 Removed (per spec change 2026-05-14):
 - lidar_node: Livox MID-360 dropped in favour of UWB absolute localisation.
 
-Environment variable SENSORS_REQUIRE_CAMERA=1 hard-fails the launch if
-realsense2_camera is not installed. Default (unset / "0") logs a warning
-and continues without the camera so dev builds without the driver still
-work.
+Environment variables:
+  SENSORS_REQUIRE_CAMERA=1       hard-fail the launch if realsense2_camera is
+                                 not installed (default: warn and continue).
+  SENSORS_REQUIRE_VALID_PARAMS=1 hard-fail the launch if sensors_params.yaml
+                                 cannot be parsed (default: warn and fall back
+                                 to camera defaults). Recommended for the
+                                 deployed NX so a malformed yaml doesn't
+                                 silently boot the wrong profile.
 
 Camera parameters (resolution / fps) are read from sensors_params.yaml so
 the YAML stays the single source of truth and the launch file does not
@@ -31,12 +35,26 @@ import yaml
 
 
 def _load_camera_params(params_file: str) -> dict:
-    """Read sensors_params.yaml and return the camera_node ros__parameters block."""
+    """Read sensors_params.yaml and return the camera_node ros__parameters block.
+
+    Failure modes (missing file, bad yaml, permission denied) print a visible
+    warning so launch-time silence does not mask a misconfigured deployment.
+    Set SENSORS_REQUIRE_VALID_PARAMS=1 to promote the warning to a hard fail.
+    """
+    require_valid = os.environ.get('SENSORS_REQUIRE_VALID_PARAMS', '0') == '1'
     try:
         with open(params_file) as f:
             doc = yaml.safe_load(f) or {}
         return doc.get('camera_node', {}).get('ros__parameters', {})
-    except Exception:
+    except Exception as e:
+        msg = (
+            f'[sensors.launch.py] WARNING: failed to read camera params from '
+            f'{params_file}: {type(e).__name__}: {e}'
+        )
+        if require_valid:
+            raise RuntimeError(
+                f'SENSORS_REQUIRE_VALID_PARAMS=1 but {msg}') from e
+        print(msg + ' -- falling back to camera defaults.', flush=True)
         return {}
 
 
