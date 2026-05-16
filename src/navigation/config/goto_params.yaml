@@ -8,7 +8,9 @@
 goto_node:
   ros__parameters:
     # Control loop
-    update_rate_hz: 10            # P-controller tick rate while MOVING
+    # Both rates declared as float so rclpy.declare_parameter sees a consistent
+    # DoubleType and `--ros-args -p update_rate_hz:=12.5` overrides work.
+    update_rate_hz: 10.0          # P-controller tick rate while MOVING
     idle_publish_hz: 2.0          # zero-Twist heartbeat rate while state != MOVING.
                                   # Feeds safety_monitor's cmd_vel_timeout_s
                                   # watchdog (2.0 s) -- chosen 2 Hz so a single

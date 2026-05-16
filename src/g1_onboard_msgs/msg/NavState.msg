@@ -16,10 +16,15 @@ uint8 STATUS_CANCELED = 4   # PREEMPTED BY A NEW NAV_GOAL (2026-05-16 navigation
                             # review #4, #5). There is no external /onboard/cmd/
                             # nav_cancel API by design; external cancellation
                             # flows through safety_monitor E-STOP.
-                            # When a new goal arrives while MOVING, the node
-                            # emits NavState(CANCELED, "preempted by '<new>'")
-                            # for the old goal followed by NavState(MOVING, ...)
-                            # for the new one, so the PC trace stays continuous.
+                            # Emitted ONLY for preemption from MOVING -- i.e. a
+                            # live goal got cut short. New nav_goal arriving in
+                            # IDLE / REACHED / FAILED transitions directly to
+                            # MOVING with no intermediate CANCELED (REACHED and
+                            # FAILED are terminal -- there is no active goal to
+                            # cancel). When emitted, the node publishes
+                            # NavState(CANCELED, "preempted by '<new>'") for
+                            # the old goal followed by NavState(MOVING, ...)
+                            # for the new one so the PC trace stays continuous.
 
 uint8 status
 

@@ -52,17 +52,32 @@ Outputs:
 - /onboard/nav/state          (NavState)     IDLE/MOVING/REACHED/FAILED/CANCELED
 
 State machine summary:
-  IDLE ---nav_goal known---> MOVING --at_goal--> REACHED
-   ^                          | uwb_stale         |
-   |                          v                   |
-   +--new nav_goal--- CANCELED <--new nav_goal---+
-   |                          |                   |
-   FAILED <--uwb_stale--------+                   |
-   (does NOT auto-resume; new nav_goal required)
 
-  CANCELED here means "preempted by a new nav_goal", not an external cancel
-  request -- there is no /onboard/cmd/nav_cancel topic by design. External
-  cancellation flows through safety_monitor E-STOP. See NavState.msg.
+         nav_goal known
+  IDLE -----------------> MOVING --at_goal--> REACHED
+                            |  ^                |
+              uwb_stale     |  |                | new nav_goal
+                            v  | new nav_goal   v
+                          FAILED <----------- (direct)
+                            ^                   |
+                            +-- new nav_goal -->+
+                            |                   |
+                          MOVING --new nav_goal-> CANCELED -> MOVING (new)
+
+  Edge meanings:
+    * CANCELED is emitted ONLY when a new nav_goal arrives while the
+      previous goal is still active (state == MOVING). REACHED and FAILED
+      are terminal -- there is no active goal to cancel, so a new
+      nav_goal transitions directly to MOVING with no intermediate
+      CANCELED message. This keeps the PC trace meaningful:
+      "CANCELED" = "we cut a live goal short", not "we replaced a
+      finished one".
+    * STATUS_FAILED is sticky after uwb_stale -- a fresh nav_goal is
+      required to leave it; UWB recovery alone does NOT auto-resume.
+
+  External cancellation: there is no /onboard/cmd/nav_cancel topic by
+  design. External cancellation flows through safety_monitor E-STOP.
+  See NavState.msg.
 """
 import rclpy
 from rclpy.node import Node
@@ -83,6 +98,11 @@ class GotoNode(Node):
         #               carry as a single value -- same trap that bit
         #               comm_bridge's relay table. Result: {name: (x, y, theta)}
         #               in-memory dict at startup.
+        #               NOTE: theta may be Python None (yaml `null` placeholder
+        #               while yaw is RESERVED -- see module docstring). Store
+        #               as-is and skip any yaw-related arithmetic while
+        #               kp_angular == 0; do not coerce None to 0.0 or the
+        #               "not measured yet" signal is lost.
         # TODO(REQ-37): subscribe /onboard/sensors/uwb/pose (geometry_msgs/PoseStamped)
         # TODO(REQ-30, REQ-37): subscribe /onboard/cmd/nav_goal (std_msgs/String)
         # TODO(REQ-37): publisher /onboard/navigation/cmd_vel (geometry_msgs/Twist)
@@ -96,13 +116,17 @@ class GotoNode(Node):
     # TODO(REQ-37): def _on_uwb_pose(self, msg)  -- cache latest pose + timestamp
     # TODO(REQ-30): def _on_nav_goal(self, msg)
     #               unknown name -> publish NavState(FAILED, "unknown goal '<name>'");
-    #               known name with state == MOVING (preemption case) ->
-    #                 publish NavState(CANCELED, "preempted by '<new>'") for the
-    #                 OLD goal first, then NavState(MOVING, ...) for the new goal.
-    #                 Two NavState messages, in that order, so the PC trace
-    #                 stays continuous.
-    #               known name otherwise -> store (x, y, theta) and transition
-    #                 to MOVING.
+    #               known name -> store (x, y, theta) and transition by current state:
+    #                 from MOVING (preemption)  : emit NavState(CANCELED,
+    #                                             "preempted by '<new>'") for the
+    #                                             OLD goal, THEN NavState(MOVING, ...)
+    #                                             for the new one -- two messages,
+    #                                             in that order, so the PC trace
+    #                                             stays continuous.
+    #                 from IDLE / REACHED / FAILED : emit NavState(MOVING, ...)
+    #                                             directly. There is no active
+    #                                             goal to cancel; REACHED and
+    #                                             FAILED are terminal states.
     # TODO(REQ-37): def _step(self)
     #               1. if (now - last_uwb_stamp) > uwb_timeout_s:
     #                       _halt("uwb_timeout") -- emit FAILED, NOT auto-resume.
