@@ -34,18 +34,36 @@ from launch_ros.actions import Node
 import yaml
 
 
+_CAMERA_INT_KEYS = (
+    'color_width', 'color_height', 'color_fps',
+    'depth_width', 'depth_height', 'depth_fps',
+)
+
+
 def _load_camera_params(params_file: str) -> dict:
     """Read sensors_params.yaml and return the camera_node ros__parameters block.
 
-    Failure modes (missing file, bad yaml, permission denied) print a visible
-    warning so launch-time silence does not mask a misconfigured deployment.
+    Failure modes (missing file, bad yaml, permission denied, AND non-numeric
+    values in numeric fields like color_fps: "thirty") print a visible warning
+    so launch-time silence does not mask a misconfigured deployment.
     Set SENSORS_REQUIRE_VALID_PARAMS=1 to promote the warning to a hard fail.
+
+    Int coercion happens inside the try-block so a bad yaml value surfaces here
+    and respects the env-var gate, instead of crashing the caller's
+    int(cam.get(...)) chain that would bypass the gate.
     """
     require_valid = os.environ.get('SENSORS_REQUIRE_VALID_PARAMS', '0') == '1'
     try:
         with open(params_file) as f:
             doc = yaml.safe_load(f) or {}
-        return doc.get('camera_node', {}).get('ros__parameters', {})
+        cam = doc.get('camera_node', {}).get('ros__parameters', {}) or {}
+        # Coerce numeric fields up-front; if a value is a non-numeric string
+        # the ValueError lands in the except below (and the env-var gate applies).
+        # Booleans (enable_color, enable_depth) are left to the caller via .lower().
+        for key in _CAMERA_INT_KEYS:
+            if key in cam:
+                cam[key] = int(cam[key])
+        return cam
     except Exception as e:
         msg = (
             f'[sensors.launch.py] WARNING: failed to read camera params from '
