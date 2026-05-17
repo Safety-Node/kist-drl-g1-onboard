@@ -72,4 +72,15 @@ PRs are squash-merged to `main`. Conventions enforced in CI:
 - Branch name: `TASK-{number}` (no description suffix)
 - PR title: `[TASK-{number}] <type>(<scope>)?: <subject>` ([Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/))
 
+**PR title casing rules** (enforced by the regex):
+
+| Part | Rule | Example |
+|---|---|---|
+| `type` | lowercase, must be in the allowed set (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`) | `feat` |
+| `scope` (optional) | lowercase letters / digits / `_` / `-` only | `(sensors)`, `(comm_bridge)` |
+| `subject` first char | must be lowercase | `a` in `add UWB driver` |
+| `subject` after first char | anything — acronyms like `UWB`, `ROS`, `NX` are OK | `add UWB driver` |
+
+Examples: `[TASK-42] feat(sensors): add UWB driver` ✓ &nbsp;&nbsp; `[TASK-42] feat(sensors): Add UWB driver` ✗
+
 See `.github/workflows/pr-meta.yml`.
