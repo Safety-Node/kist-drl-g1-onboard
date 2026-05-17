@@ -61,8 +61,9 @@ jobs:
             echo "Examples that fail:"
             echo "  feat(sensors): add UWB driver         (missing [TASK-{n}] prefix)"
             echo "  TASK-42 feat(sensors): add ...        (missing brackets)"
-            echo "  [TASK-42] Feat(sensors): add ...      (uppercase type)"
-            echo "  [TASK-42] feat(sensors): Add ...      (uppercase subject)"
+            echo "  [TASK-42] Feat(sensors): add ...      (type must be one of: feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)"
+            echo "  [TASK-42] feat(Sensors): add ...      (scope must be lowercase)"
+            echo "  [TASK-42] feat(sensors): Add ...      (subject first char must be lowercase -- mid-subject acronyms like UWB are OK)"
             exit 1
           fi
           echo "PR title OK: $TITLE"
