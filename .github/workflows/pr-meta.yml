@@ -29,18 +29,18 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref }}
         run: |
-          if [[ ! "$BRANCH" =~ ^TASK-[0-9]+(-[a-z0-9._-]+)?$ ]]; then
-            echo "::error::Branch name '$BRANCH' must match TASK-{number}[-kebab-description]"
+          if [[ ! "$BRANCH" =~ ^TASK-[0-9]+$ ]]; then
+            echo "::error::Branch name '$BRANCH' must match TASK-{number} (no suffix)"
             echo ""
             echo "Examples that pass:"
             echo "  TASK-42"
-            echo "  TASK-42-add-uwb-driver"
-            echo "  TASK-7-fix-estop-watchdog"
+            echo "  TASK-7"
             echo ""
             echo "Examples that fail:"
-            echo "  feature/uwb           (wrong prefix)"
-            echo "  TASK-Add-UWB          (no number, uppercase)"
-            echo "  task-42               (lowercase 'task')"
+            echo "  TASK-42-add-uwb-driver  (suffix not allowed)"
+            echo "  feature/uwb             (wrong prefix)"
+            echo "  TASK-Add-UWB            (no number)"
+            echo "  task-42                 (lowercase 'task')"
             exit 1
           fi
           echo "Branch name OK: $BRANCH"

@@ -69,7 +69,7 @@ Each `TODO([TASK-XX])` in code links to the matching Task page.
 
 PRs are squash-merged to `main`. Conventions enforced in CI:
 
-- Branch name: `TASK-{number}[-kebab-description]`
+- Branch name: `TASK-{number}` (no description suffix)
 - PR title: [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 
 See `.github/workflows/pr-meta.yml`.
