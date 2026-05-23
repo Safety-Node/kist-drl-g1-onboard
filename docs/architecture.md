@@ -30,7 +30,7 @@ G1 Onboard (Orin NX)                                  ↕ Ethernet/CycloneDDS �
 │  - mic / speaker_node        │ ─ AudioPCM ──────► comm_bridge ─► PC (STT)
 │  - joint_state_node          │ ─ JointState ────► comm_bridge ─► PC (VLA)
 │  - imu_node (NEW 22, UPD 23) │ ─ IMU(base + ankle L/R) ─► comm_bridge ─► PC (VLA + GearSonic)
-│  - uwb_node                  │ ─ UWB Pose ─────► comm_bridge ─► PC (PC-side path planner)
+│  - uwb_node                  │ ─ UWB Pose ─────► comm_bridge ─► PC (TaskSrvProvider, sub-task success detection)
 └──────────────────────────────┘
                                                                 ▲
         ┌──────────────────────────────────────────────┐        │
