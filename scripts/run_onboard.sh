@@ -31,7 +31,6 @@ trap cleanup EXIT INT TERM
 
 ros2 launch sensors           sensors.launch.py           & PIDS+=( $! )
 ros2 launch comm_bridge       comm_bridge.launch.py       & PIDS+=( $! )
-ros2 launch navigation        navigation.launch.py        & PIDS+=( $! )
 ros2 launch safety_monitor    safety_monitor.launch.py    & PIDS+=( $! )
 ros2 launch motor_controller  motor_controller.launch.py  & PIDS+=( $! )
 

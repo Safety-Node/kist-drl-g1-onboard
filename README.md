@@ -3,7 +3,7 @@
 **KIST DRL — Unitree G1 NX Onboard Software Stack**
 
 ROS 2 Humble workspace for the Jetson Orin NX onboard the Unitree G1.
-Sensor publishing, UWB navigation, NX↔PC bridging, real-time safety, motor execution.
+Sensor publishing, UWB pose streaming, NX↔PC bridging, real-time safety, motor execution.
 
 > Target HW: Unitree G1 + Jetson Orin NX (Ubuntu 22.04, JetPack 6.x)
 > Companion repo: `kist-drl-g1-ws` (PC side — VLA / Cortex / Providers)
@@ -20,9 +20,8 @@ Sensor publishing, UWB navigation, NX↔PC bridging, real-time safety, motor exe
 | `g1_onboard_msgs` | ament_cmake | Custom interfaces (AudioPCM, JointCmd, …) |
 | `sensors` | ament_python | RealSense / mic / speaker / joint_state / UWB |
 | `comm_bridge` | ament_python | `/onboard/` ↔ `/bridge/` relay + QoS conversion |
-| `navigation` | ament_python | UWB `goto_node` (P-controller) |
 | `safety_monitor` | ament_python | 200 ms E-STOP + command validation (systemd) |
-| `motor_controller` | ament_python | 20 Hz G1 SDK dispatch (systemd) |
+| `motor_controller` | ament_python | 100 Hz G1 SDK dispatch (systemd) |
 
 ---
 
