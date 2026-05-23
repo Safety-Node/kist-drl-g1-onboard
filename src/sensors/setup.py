@@ -28,7 +28,7 @@ setup(
             'mic_node         = sensors.mic_node:main',
             'speaker_node     = sensors.speaker_node:main',
             'joint_state_node = sensors.joint_state_node:main',
-            'imu_ankle_node   = sensors.imu_ankle_node:main',
+            'imu_node         = sensors.imu_node:main',
             'uwb_node         = sensors.uwb_node:main',
         ],
     },

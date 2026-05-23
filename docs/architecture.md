@@ -15,6 +15,7 @@ Authoritative spec lives in Notion. This file is a developer-facing summary.
 | 2026-05-14 | SLAM/Nav2/LiDAR removed; UWB-only localisation; single `goto_node` replaces Nav2 stack; obstacle avoidance dropped (fixed demo environment); Camera Depth retained for safety proximity E-STOP only | Demo-driven simplification, time-saving (REQ-37 redefined) |
 | 2026-05-16 | nav_goal channel reverts to `std_msgs/String` named goal (e.g. `"refrigerator"`); NX `goto_node` owns `named_goals.yaml` lookup again. Reverts 2026-05-15 decision 5a. | One-line CLI debugging without standing up the PC stack |
 | 2026-05-22 | (1) NX `navigation` package removed — path planning moved to PC; `Nav Cmd Goal` + `Validated Twist` ICDs deprecated. (2) Walking integrated into low-level VLA (rt/lowcmd via `/onboard/cmd/low`); new `Joint Cmd Lower Body` ICD; `motor_controller` VELOCITY_CMD mode dropped. (3) Control loop 20 Hz → **100 Hz** (REQ-34/38 v2026-05-22). (4) Ankle IMU streaming added (`imu_ankle_node` → `/onboard/sensors/imu/ankle_{left,right}`) as GearSonic input. (5) GearSonic (whole-body balance correction) added to spec as 🚧 사양 합의 대기. | KIST mail (Yim,Sehyuk, 2026-05-22): high↔low transition's BalanceStand discontinuity, low-level minimum 100 Hz, GearSonic introduction |
+| 2026-05-23 | IMU ownership unified — base IMU moved out of `joint_state_node` into new `imu_node` (also owns ankle L/R). Reverses the 2026-05-15 lowstate fan-out decision. `joint_state_node` now owns `/onboard/sensors/joint_states` only. | Naming/ownership consistency: node name ↔ topic prefix symmetric (`imu_node` ↔ `/onboard/sensors/imu/*`), future IMU sources (wrist, etc.) drop in cleanly. DDS multi-subscriber cost at 100 Hz lowstate is negligible. |
 
 ---
 
@@ -27,8 +28,8 @@ G1 Onboard (Orin NX)                                  ↕ Ethernet/CycloneDDS �
 │ sensors                      │
 │  - camera_node (RealSense)   │ ─ Color/Depth ───► comm_bridge ─► PC (VLA)
 │  - mic / speaker_node        │ ─ AudioPCM ──────► comm_bridge ─► PC (STT)
-│  - joint_state_node          │ ─ JointState + IMU(base) ─► comm_bridge ─► PC (VLA)
-│  - imu_ankle_node  (NEW 22)  │ ─ IMU(ankle L/R) ─► comm_bridge ─► PC (GearSonic)
+│  - joint_state_node          │ ─ JointState ────► comm_bridge ─► PC (VLA)
+│  - imu_node (NEW 22, UPD 23) │ ─ IMU(base + ankle L/R) ─► comm_bridge ─► PC (VLA + GearSonic)
 │  - uwb_node                  │ ─ UWB Pose ─────► comm_bridge ─► PC (PC-side path planner)
 └──────────────────────────────┘
                                                                 ▲

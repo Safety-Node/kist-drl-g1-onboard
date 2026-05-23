@@ -17,24 +17,29 @@ speaker_node:
     channels: 1                   # mono
     max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
-# [TASK-32] G1 SDK lowstate fan-out — joint encoders + body IMU on same channel.
+# [TASK-32] G1 SDK lowstate → JointState publisher.
+# 2026-05-23 refactor: base IMU moved out (now in imu_node). This node only
+# owns /onboard/sensors/joint_states.
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
     network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
     domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
-    imu_frame_id: "base_link"
 
-# [TASK-999] Ankle IMU streaming (left + right) — GearSonic balance-correction input.
-# 2026-05-22 KIST mail. G1 SDK ankle IMU source TBD; placeholder publish until confirmed.
-imu_ankle_node:
+# [TASK-999] IMU streaming — base + ankle L/R (single owner since 2026-05-23
+# refactor; reverses 2026-05-15 fan-out via joint_state_node).
+# Base IMU from G1 SDK lowstate (own subscription, parallel to joint_state_node).
+# Ankle IMU source TBD; placeholder publish until KIST/SDK confirms channel.
+imu_node:
   ros__parameters:
     publish_rate_hz: 100
+    imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
-    # TBD: real ankle IMU source. lowstate is already consumed by joint_state_node;
-    # check whether G1 SDK exposes ankle IMU on a separate channel or if it is
-    # derived (e.g. via FK from joint encoders + base IMU).
+    # TBD: real ankle IMU source. lowstate is consumed by both joint_state_node
+    # and this node (DDS multi-subscriber, negligible cost); check whether G1
+    # SDK exposes ankle IMU on a separate channel or if it must be derived
+    # (e.g. via FK from joint encoders + base IMU).
 
 # [TASK-32] RealSense D435i — read by sensors.launch.py and passed as launch_arguments.
 camera_node:
