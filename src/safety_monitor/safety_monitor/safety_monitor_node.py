@@ -17,7 +17,7 @@ Publications:
 By-design exclusions: /onboard/cmd/loco bypasses this node (motor_controller
 dispatches LocoClient FSM directly).
 
-2026-05-22 KIST mail [TASK-999]:
+2026-05-22 KIST mail:
 - cmd_vel path retired (navigation package removed + walking is now low-level
   VLA via /cmd/low). validated_twist publication dropped accordingly.
 - Validation now runs at 100 Hz (REQ-34 v2026-05-22) — joint_limits / velocity
@@ -41,7 +41,7 @@ TODO(REQ-35) [TASK-33]: per-stream comms watchdog + state-stream staleness watch
 TODO(REQ-35) [TASK-33]: self-watchdog (loop overrun → REASON_WATCHDOG + SHM set).
 TODO(REQ-35) [TASK-33]: EstopFlag heartbeat at estop_heartbeat_hz.
 TODO(REQ-35) [TASK-33]: gc.disable() after steady-state warm-up.
-TODO(REQ-35) [TASK-999]: re-rate validation budget for 100 Hz loop (was 20 Hz).
+TODO(REQ-35): re-rate validation budget for 100 Hz loop (was 20 Hz).
 """
 import rclpy
 from rclpy.node import Node

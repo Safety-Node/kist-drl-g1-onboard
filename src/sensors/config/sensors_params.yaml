@@ -17,7 +17,7 @@ speaker_node:
     channels: 1                   # mono
     max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
-# [TASK-32] G1 SDK lowstate → JointState publisher.
+# [TASK-37] G1 SDK lowstate → JointState publisher.
 # 2026-05-23 refactor: base IMU moved out (now in imu_node). This node only
 # owns /onboard/sensors/joint_states.
 joint_state_node:
@@ -26,8 +26,8 @@ joint_state_node:
     network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
     domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
 
-# [TASK-999] IMU streaming — base + ankle L/R (single owner since 2026-05-23
-# refactor; reverses 2026-05-15 fan-out via joint_state_node).
+# [TASK-38] IMU streaming — base + ankle L/R (single owner since 2026-05-23 refactor;
+# reverses 2026-05-15 fan-out via joint_state_node).
 # Base IMU from G1 SDK lowstate (own subscription, parallel to joint_state_node).
 # Ankle IMU source TBD; placeholder publish until KIST/SDK confirms channel.
 imu_node:

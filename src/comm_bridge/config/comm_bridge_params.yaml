@@ -5,7 +5,7 @@
 # QoS rule of thumb: sensor → best_effort (freshness wins),
 #                    state/command → reliable (don't drop transitions).
 #
-# 2026-05-22 (KIST mail, [TASK-999]):
+# 2026-05-22 (KIST mail):
 #   - nav_goal inbound + nav/state outbound removed (navigation package retired,
 #     path planning moved to PC).
 #   - /bridge/cmd/low added (low-level VLA whole-body wire, REQ-34 100 Hz,

@@ -22,10 +22,10 @@ endpoint (TBD — KIST or SDK doc check). Until confirmed, ankle topics
 publish a placeholder so downstream wiring (comm_bridge relay + PC
 subscriber) can be exercised end-to-end.
 
-TODO(REQ-42) [TASK-999]: declare params (publish_rate_hz + 3 frame_ids).
-TODO(REQ-42) [TASK-999]: base IMU from G1 SDK lowstate (own subscription).
-TODO(REQ-42) [TASK-999]: confirm G1 SDK ankle IMU source; swap placeholder for real read.
-TODO(REQ-42) [TASK-999]: paired timestamp if both ankles share a frame from the same SDK sample.
+TODO(REQ-42) [TASK-38]: declare params (publish_rate_hz + 3 frame_ids).
+TODO(REQ-42) [TASK-38]: base IMU from G1 SDK lowstate (own subscription).
+TODO(REQ-42) [TASK-38]: confirm G1 SDK ankle IMU source; swap placeholder for real read.
+TODO(REQ-42) [TASK-38]: paired timestamp if both ankles share a frame from the same SDK sample.
 """
 import rclpy
 from rclpy.node import Node
@@ -34,7 +34,7 @@ from rclpy.node import Node
 class ImuNode(Node):
     def __init__(self) -> None:
         super().__init__('imu_node')
-        # TODO(REQ-42) [TASK-999]: wire 3 publishers + timer.
+        # TODO(REQ-42) [TASK-38]: wire 3 publishers + timer.
         #   Base IMU: real (from G1 SDK lowstate, independent subscription
         #             from joint_state_node).
         #   Ankle L/R: placeholder publish until SDK source confirmed.

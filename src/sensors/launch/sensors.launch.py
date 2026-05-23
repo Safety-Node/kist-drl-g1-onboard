@@ -5,8 +5,8 @@ Composition:
 - camera_node       realsense2_camera (external C++ driver)  [TASK-32]
 - mic_node          sensors.mic_node                          [TASK-36]
 - speaker_node      sensors.speaker_node                      [TASK-31]
-- joint_state_node  sensors.joint_state_node                  [TASK-32]
-- imu_node    sensors.imu_node                    [TASK-999]
+- joint_state_node  sensors.joint_state_node                  [TASK-37]
+- imu_node          sensors.imu_node                          [TASK-38]
 - uwb_node          sensors.uwb_node                          [TASK-30]
 
 Env vars:
@@ -140,7 +140,7 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
-    # [TASK-32]
+    # [TASK-37]
     joint_state_node = Node(
         package='sensors',
         executable='joint_state_node',
@@ -149,8 +149,8 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
-    # [TASK-999] 2026-05-22 KIST mail — IMU (base + ankle L/R) for VLA + GearSonic.
-    #            2026-05-23 refactor: owns all IMU topics (was split with joint_state_node).
+    # [TASK-38] 2026-05-22 KIST mail — IMU (base + ankle L/R) for VLA + GearSonic.
+    #           2026-05-23 refactor: owns all IMU topics (was split with joint_state_node).
     imu_node = Node(
         package='sensors',
         executable='imu_node',

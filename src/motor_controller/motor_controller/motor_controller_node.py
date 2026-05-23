@@ -26,7 +26,7 @@ G1 SDK targets:
 - LOCO_CMD      → LocoClient.<method>() from LocoCommand.action
 - ESTOP         → LocoClient.Damp() + arm weight 1.0→0.0 ramp + flush
 
-2026-05-22 KIST mail [TASK-999]:
+2026-05-22 KIST mail:
 - VELOCITY_CMD mode / LocoClient.Move(vx, vy, vyaw) dropped — walking is now
   low-level VLA via /cmd/low. velocity_buf removed.
 - Loop rate 20 Hz → 100 Hz. Existing 20 ms ramp / busy-wait hybrid timer /
@@ -56,7 +56,7 @@ TODO(REQ-34, REQ-38) [TASK-34]: 100 Hz control loop (busy-wait hybrid, gc.disabl
 TODO(REQ-35) [TASK-34]: ESTOP path — LocoClient.<estop_loco_action>() + arm weight
                          1.0→0.0 ramp + action_queue.flush().
 TODO(REQ-34) [TASK-34]: optional NX crossfade if step_index==0 with new chunk_id.
-TODO(REQ-34) [TASK-999]: re-rate arm weight ramp step count for 100 Hz period.
+TODO(REQ-34): re-rate arm weight ramp step count for 100 Hz period.
 """
 import rclpy
 from rclpy.node import Node
