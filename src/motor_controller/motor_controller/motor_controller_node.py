@@ -18,7 +18,8 @@ G1 SDK targets:
 - rt/arm_sdk          upper-body joints, weight = motor_cmd[29].q (from /cmd/arm)
 - rt/lowcmd           lower-body joints, weight ignored (from /cmd/low, NEW 2026-05-22)
 - LocoClient action   discrete FSM (Damp / StandUp / BalanceStand / SitDown / ...)
-                      — demo entry/exit only (LocoCommand channel)
+                      via LocoCommand channel — usage scope TBD (likely
+                      demo entry/exit + posture transitions; not finalized)
 
 3 dispatch modes (queue does not carry an enum; dispatcher routes by joint_names):
 - JOINT_CMD_ARM → rt/arm_sdk publish (weight ramped from arm_default_weight)

@@ -45,7 +45,7 @@ G1 Onboard (Orin NX)                                  ↕ Ethernet/CycloneDDS �
                             │ motor_controller             │ ─ G1 SDK
                             │ 100 Hz loop + Ring Buffer    │   ├─ rt/arm_sdk    (from /cmd/arm)
                             │ + crossfade fallback         │   ├─ rt/lowcmd     (from /cmd/low, NEW)
-                            │                              │   └─ LocoClient FSM (from /cmd/loco — demo entry/exit only)
+                            │                              │   └─ LocoClient FSM (from /cmd/loco — usage TBD: demo entry/exit + posture)
                             └──────────────────────────────┘
                                           │ Buf State
                                           ▼
