@@ -1,9 +1,18 @@
 # comm_bridge — relay table {src, dst, type, qos: best_effort|reliable}.
-# Routing: /bridge/cmd/{arm, loco, nav_goal, audio_out} inbound;
-#          /bridge/{sensors/*, nav/state, motor/buf_state,
+# Routing: /bridge/cmd/{arm, low, loco, audio_out} inbound;
+#          /bridge/{sensors/*, motor/buf_state,
 #                   audio/speaker_state, safety/estop} outbound.
 # QoS rule of thumb: sensor → best_effort (freshness wins),
 #                    state/command → reliable (don't drop transitions).
+#
+# 2026-05-22 (KIST mail):
+#   - nav_goal inbound + nav/state outbound removed (navigation package retired
+#     entirely — walking is now low-level VLA whole-body, no separate path
+#     planner anywhere; UWB pose stream remains via sensors/uwb_node and is
+#     consumed by workstation's TaskSrvProvider for sub-task success detection).
+#   - /bridge/cmd/low added (low-level VLA whole-body wire, REQ-34 100 Hz,
+#     pairs with /bridge/cmd/arm).
+#   - Ankle IMU outbound relays added (GearSonic input).
 #
 # TODO(REQ-32) [TASK-28]: finalise after /bridge/ schema is locked.
 
@@ -32,16 +41,20 @@ outbound_relay:
         dst:  "/bridge/sensors/imu"
         type: "sensor_msgs/msg/Imu"
         qos:  "best_effort"
+      - src:  "/onboard/sensors/imu/ankle_left"
+        dst:  "/bridge/sensors/imu/ankle_left"
+        type: "sensor_msgs/msg/Imu"
+        qos:  "best_effort"
+      - src:  "/onboard/sensors/imu/ankle_right"
+        dst:  "/bridge/sensors/imu/ankle_right"
+        type: "sensor_msgs/msg/Imu"
+        qos:  "best_effort"
       - src:  "/onboard/sensors/uwb/pose"
         dst:  "/bridge/sensors/uwb_pose"
         type: "geometry_msgs/msg/PoseStamped"
         qos:  "best_effort"
 
       # ---------- State reports (RELIABLE — don't drop transitions) ----------
-      - src:  "/onboard/nav/state"
-        dst:  "/bridge/nav/state"
-        type: "g1_onboard_msgs/msg/NavState"
-        qos:  "reliable"
       - src:  "/onboard/motor/buf_state"
         dst:  "/bridge/motor/buf_state"
         type: "g1_onboard_msgs/msg/BufState"
@@ -64,20 +77,18 @@ inbound_relay:
         dst:  "/onboard/cmd/arm"
         type: "g1_onboard_msgs/msg/JointCmd"
         qos:  "reliable"
+      - src:  "/bridge/cmd/low"
+        dst:  "/onboard/cmd/low"
+        type: "g1_onboard_msgs/msg/JointCmd"
+        qos:  "reliable"
+        # 2026-05-22: low-level VLA whole-body wire (rt/lowcmd path, weight
+        # ignored). Pairs with /bridge/cmd/arm (rt/arm_sdk, weight respected).
+        # Walking is now low-level VLA — replaces the retired cmd_vel path.
       - src:  "/bridge/cmd/loco"
         dst:  "/onboard/cmd/loco"
         type: "g1_onboard_msgs/msg/LocoCommand"
         qos:  "reliable"
-      - src:  "/bridge/cmd/nav_goal"
-        dst:  "/onboard/cmd/nav_goal"
-        type: "std_msgs/msg/String"
-        qos:  "reliable"
-        # 2026-05-16: revert decision 5a -- NX accepts named goal text again
-        # (e.g. "refrigerator"). goto_node looks up named_goals.yaml -> coords.
       - src:  "/bridge/cmd/audio_out"
         dst:  "/onboard/audio/playback"
         type: "g1_onboard_msgs/msg/AudioPCM"
         qos:  "reliable"
-
-      # NOTE: /bridge/cmd/low (rt/lowcmd debug path) not exposed yet (YAGNI).
-      #       Add when full-body manual / debug override is required.

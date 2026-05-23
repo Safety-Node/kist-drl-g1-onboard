@@ -14,10 +14,12 @@ Authoritative spec lives in Notion. This file is a developer-facing summary.
 |---|---|---|
 | 2026-05-14 | SLAM/Nav2/LiDAR removed; UWB-only localisation; single `goto_node` replaces Nav2 stack; obstacle avoidance dropped (fixed demo environment); Camera Depth retained for safety proximity E-STOP only | Demo-driven simplification, time-saving (REQ-37 redefined) |
 | 2026-05-16 | nav_goal channel reverts to `std_msgs/String` named goal (e.g. `"refrigerator"`); NX `goto_node` owns `named_goals.yaml` lookup again. Reverts 2026-05-15 decision 5a. | One-line CLI debugging without standing up the PC stack |
+| 2026-05-22 | (1) NX `navigation` package removed — walking integrated into low-level VLA whole-body (no separate path planner anywhere; UWB pose retained for TaskSrvProvider sub-task success detection). `Nav Cmd Goal` + `Validated Twist` ICDs deprecated. (2) Walking integrated into low-level VLA (rt/lowcmd via `/onboard/cmd/low`); new `Joint Cmd Lower Body` ICD; `motor_controller` VELOCITY_CMD mode dropped. (3) Control loop 20 Hz → **100 Hz** (REQ-34/38 v2026-05-22). (4) Ankle IMU streaming added (`imu_ankle_node` → `/onboard/sensors/imu/ankle_{left,right}`) as GearSonic input. (5) GearSonic (whole-body balance correction) added to spec as 🚧 사양 합의 대기. | KIST mail (Yim,Sehyuk, 2026-05-22): high↔low transition's BalanceStand discontinuity, low-level minimum 100 Hz, GearSonic introduction |
+| 2026-05-23 | IMU ownership unified — base IMU moved out of `joint_state_node` into new `imu_node` (also owns ankle L/R). Reverses the 2026-05-15 lowstate fan-out decision. `joint_state_node` now owns `/onboard/sensors/joint_states` only. | Naming/ownership consistency: node name ↔ topic prefix symmetric (`imu_node` ↔ `/onboard/sensors/imu/*`), future IMU sources (wrist, etc.) drop in cleanly. DDS multi-subscriber cost at 100 Hz lowstate is negligible. |
 
 ---
 
-## NX Container Map (post-2026-05-14)
+## NX Container Map (post-2026-05-22)
 
 ```
 G1 Onboard (Orin NX)                                  ↕ Ethernet/CycloneDDS ↕ PC (RTX 4090)
@@ -25,32 +27,39 @@ G1 Onboard (Orin NX)                                  ↕ Ethernet/CycloneDDS �
 ┌──────────────────────────────┐
 │ sensors                      │
 │  - camera_node (RealSense)   │ ─ Color/Depth ───► comm_bridge ─► PC (VLA)
-│  - audio_node  (ALSA)        │ ─ AudioPCM ──────► comm_bridge ─► PC (STT)
+│  - mic / speaker_node        │ ─ AudioPCM ──────► comm_bridge ─► PC (STT)
 │  - joint_state_node          │ ─ JointState ────► comm_bridge ─► PC (VLA)
-│  - uwb_node    (NEW)         │ ─ /onboard/sensors/uwb/pose (PoseStamped, map frame)
-└──────────────────────────────┘                           │
-                                                           ▼
-                            ┌──────────────────────────────┐
-                            │ navigation / goto_node       │ ◄── /onboard/cmd/nav_goal (from PC)
-                            │ (P-controller, no Nav2)      │
-                            └──────────────────────────────┘
-                                          │ /onboard/navigation/cmd_vel
-                                          ▼
-        ┌──────────────────────────────────────────────┐
-        │ safety_monitor                               │ ◄── Depth (RealSense)  (proximity E-STOP)
-        │  - joint limit / velocity / proximity check  │ ◄── /onboard/cmd/joint (from PC)
+│  - imu_node (NEW 22, UPD 23) │ ─ IMU(base + ankle L/R) ─► comm_bridge ─► PC (VLA + GearSonic)
+│  - uwb_node                  │ ─ UWB Pose ─────► comm_bridge ─► PC (TaskSrvProvider, sub-task success detection)
+└──────────────────────────────┘
+                                                                ▲
+        ┌──────────────────────────────────────────────┐        │
+        │ safety_monitor                               │        │  /bridge/cmd/{arm, low, loco}
+        │  - joint limit / velocity / proximity check  │ ◄──────┘  from PC (whole-body VLA + FSM)
         │  - 200 ms E-STOP path: DDS + shared memory   │
+        │  - 100 Hz validation loop (REQ-34 v2026-05-22)│
         └──────────────────────────────────────────────┘
-                                          │ Validated Cmd / E-STOP
+                                          │ Validated Joint / E-STOP
                                           ▼
                             ┌──────────────────────────────┐
-                            │ motor_controller             │ ─ G1 SDK (LocoClient / lowcmd)
-                            │ Ring Buffer 20 Hz + crossfade│
+                            │ motor_controller             │ ─ G1 SDK
+                            │ 100 Hz loop + Ring Buffer    │   ├─ rt/arm_sdk    (from /cmd/arm)
+                            │ + crossfade fallback         │   ├─ rt/lowcmd     (from /cmd/low, NEW)
+                            │                              │   └─ LocoClient FSM (from /cmd/loco — usage TBD: demo entry/exit + posture)
                             └──────────────────────────────┘
                                           │ Buf State
                                           ▼
                                      comm_bridge ─► PC
 ```
+
+Walking is generated directly by the PC-side whole-body VLA — **no separate
+path planner exists anywhere** (`goto_node` + `named_goals.yaml` retired
+together with the `navigation` package). Joint commands arrive at NX as
+`/bridge/cmd/arm` + `/bridge/cmd/low`. UWB pose is still published by NX
+`uwb_node` but consumed only by workstation's TaskSrvProvider for sub-task
+success detection (e.g. "reached fridge?"). Sub-task success criteria may
+combine UWB pose (locomotion) and joint pos (manipulation) — final mix is
+TaskSrvProvider's concern, NX just publishes both streams.
 
 ## Topic Convention
 
@@ -80,8 +89,8 @@ outputs sit directly under `/onboard/audio/` rather than under `/onboard/sensors
 | Path | Requirement | Notes |
 |---|---|---|
 | E-STOP detection → motor stop | ≤ 200 ms (REQ-35) | shared memory flag (Python `gc.disable()`, CPUAffinity=0/1) |
-| Motor control loop | 20 Hz / 50 ms (REQ-34) | busy-wait hybrid timer |
-| Full pipeline VLA→motor | 20 Hz / 99% (REQ-38) | bottleneck is VLA inference, not NX |
+| Motor control loop | **100 Hz / 10 ms** (REQ-34 v2026-05-22) | busy-wait hybrid timer (rerated from 20 Hz; 20 ms ramp count → 100 steps for the same ~2.0 s envelope) |
+| Low-level control loop end-to-end | 100 Hz / 99% (REQ-38 v2026-05-22) | VLA chunk emission (~15 Hz, 16-step chunks) replayed step-by-step at 100 Hz; bottleneck is wire + safety, not NX |
 | NX↔PC RTT | < 5 ms (REQ-33) | wired LAN only |
 
 ## Process Isolation
@@ -94,4 +103,4 @@ outputs sit directly under `/onboard/audio/` rather than under `/onboard/sensors
 | Package | Build type | Reason |
 |---|---|---|
 | `g1_onboard_msgs` | `ament_cmake` | required for ROS IDL (.msg) code generation |
-| all others | `ament_python` | pure-Python nodes |
+| all others (`sensors`, `comm_bridge`, `safety_monitor`, `motor_controller`) | `ament_python` | pure-Python nodes |

@@ -2,25 +2,32 @@
 Validates all motion commands and emits E-STOP within 200 ms (REQ-35).
 
 Subscriptions:
-- /onboard/navigation/cmd_vel        (Twist)        navigation/goto_node
-- /onboard/cmd/arm                   (JointCmd)     comm_bridge inbound
+- /onboard/cmd/arm                   (JointCmd)     comm_bridge inbound (rt/arm_sdk path)
+- /onboard/cmd/low                   (JointCmd)     comm_bridge inbound (rt/lowcmd path, NEW 2026-05-22)
 - /onboard/sensors/depth/image_raw   (Image)        sensors RealSense Depth
 - /onboard/sensors/joint_states      (JointState)   sensors joint_state_node
 
 Publications:
-- /onboard/safety/validated_twist    (Twist)        → motor_controller velocity_buf
 - /onboard/safety/validated_joint    (JointCmd)     → motor_controller joint_buf
+                                                      (arm + low share the topic;
+                                                       distinguished by joint_names)
 - /onboard/safety/estop              (EstopFlag)    structured DDS + 1 Hz heartbeat
 - POSIX SHM byte (estop_shm_name)    → motor_controller zero-latency poll
 
 By-design exclusions: /onboard/cmd/loco bypasses this node (motor_controller
-dispatches LocoClient FSM directly). /onboard/cmd/low (rt/lowcmd) is unrouted
-today — if exposed, must route through here too with expanded joint_limits.
+dispatches LocoClient FSM directly).
+
+2026-05-22 KIST mail:
+- cmd_vel path retired (navigation package removed + walking is now low-level
+  VLA via /cmd/low). validated_twist publication dropped accordingly.
+- Validation now runs at 100 Hz (REQ-34 v2026-05-22) — joint_limits / velocity
+  bounds / proximity check / rate watchdog all need rerating; E-STOP budget
+  remains 200 ms.
 
 Traps:
 - joint_limits in yaml is dict-of-list → load via get_parameters_by_prefix.
-- comms watchdog is per-stream (cmd_vel_timeout_s ≠ cmd_arm_timeout_s) because
-  cmd_vel idle (BalanceStand) is legitimate but cmd/arm idle during VLA is not.
+- comms watchdog is per-stream (cmd_arm_timeout_s ≠ cmd_low_timeout_s) — both
+  active during VLA execution; either idle implies an upstream stall.
 - Unknown joint_names in JointCmd → REASON_MALFORMED_CMD (not JOINT_LIMIT).
 - State-stream staleness (joint_states / depth) silently corrupts checks;
   separate watchdog needed (reason code policy TBD: reuse COMMS_TIMEOUT vs new SENSOR_TIMEOUT).
@@ -34,6 +41,7 @@ TODO(REQ-35) [TASK-33]: per-stream comms watchdog + state-stream staleness watch
 TODO(REQ-35) [TASK-33]: self-watchdog (loop overrun → REASON_WATCHDOG + SHM set).
 TODO(REQ-35) [TASK-33]: EstopFlag heartbeat at estop_heartbeat_hz.
 TODO(REQ-35) [TASK-33]: gc.disable() after steady-state warm-up.
+TODO(REQ-35): re-rate validation budget for 100 Hz loop (was 20 Hz).
 """
 import rclpy
 from rclpy.node import Node
