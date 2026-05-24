@@ -18,7 +18,7 @@ Sensor publishing, UWB pose streaming, NX↔PC bridging, real-time safety, motor
 | Package | Build | Role |
 |---|---|---|
 | `g1_onboard_msgs` | ament_cmake | Custom interfaces (AudioPCM, JointCmd, …) |
-| `sensors` | ament_python | RealSense / mic / speaker / joint_state / UWB |
+| `sensors` | ament_python | RealSense / mic / speaker / joint_state / IMU (base + ankle L/R) / UWB |
 | `comm_bridge` | ament_python | `/onboard/` ↔ `/bridge/` relay + QoS conversion |
 | `safety_monitor` | ament_python | 200 ms E-STOP + command validation (systemd) |
 | `motor_controller` | ament_python | 100 Hz G1 SDK dispatch (systemd) |
@@ -48,6 +48,31 @@ NX — copy each package's `systemd/*.service` to `/etc/systemd/system/` and ena
 - `/bridge/*` — NX ↔ PC shared
 
 Full interface contract lives in the ICD database (link below).
+
+### Sensors detail
+
+| Topic | Producer | Note |
+|---|---|---|
+| `/onboard/sensors/camera/color`, `/depth` | `camera_node` (RealSense) | → PC VLA via `comm_bridge` |
+| `/onboard/sensors/audio/pcm` | `mic_node` | → PC STT via `comm_bridge` |
+| `/onboard/sensors/joint_states` | `joint_state_node` | → PC VLA via `comm_bridge` |
+| `/onboard/sensors/imu/base` | `imu_node` | base IMU from lowstate |
+| `/onboard/sensors/imu/ankle_left`, `/ankle_right` | `imu_node` | for GearSonic balance correction |
+| `/onboard/sensors/uwb_pose` | `uwb_node` | consumed by PC `TaskSrvProvider` for sub-task success detection (no onboard navigation) |
+
+`imu_node` (added 2026-05-22, ownership unified 2026-05-23) owns all IMU
+streams; `joint_state_node` publishes joint states only. See
+`docs/CONVENTIONS.md` CONV-003 for the rationale.
+
+---
+
+## Engineering rules
+
+Code-level architectural decisions (topic namespace, audio
+sub-namespaces, IMU ownership, systemd isolation, build system,
+real-time budgets) are documented in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+The C4 container diagram lives in the shared `KIST_DRL_G1_Arch.drawio`
+file (linked from Notion), not duplicated in this repo.
 
 ---
 
