@@ -12,9 +12,11 @@ find_package(builtin_interfaces REQUIRED)
 
 # Interface files. Order does not matter — rosidl resolves inter-message references.
 # Removed historical: ValidatedCmd (2026-05-15), ActionChunk (2026-05-16); see git log.
+# Re-added 2026-05-26: JointCmdChunk (CONV-006 REVISED — wire reversal, chunk-as-wire).
 set(msg_files
   "msg/AudioPCM.msg"
   "msg/JointCmd.msg"
+  "msg/JointCmdChunk.msg"
   "msg/LocoCommand.msg"
   "msg/BufState.msg"
   "msg/SpeakerState.msg"

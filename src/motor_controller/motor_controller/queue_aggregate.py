@@ -1,5 +1,5 @@
 """
-Optional NX-side action-chunk crossfade for joint_buf.
+Canonical chunk crossfade for joint_buf (CONV-006 REVISED 2026-05-26).
 
 Linear blend over the overlap region when a new VLA chunk arrives before
 the previous chunk drained:
@@ -8,15 +8,14 @@ the previous chunk drained:
         blended[i] = (1-w)*old[i] + w*new[i]
     blended[overlap:] = new[overlap:]
 
-Canonical crossfade lives at the PC VLA Provider (next to inference).
-This function is the NX-side fallback, activated when motor_controller
-detects a chunk boundary (step_index==0 with a new chunk_id). OFF by
-default.
+Invoked by motor_controller_node on chunk_id transition (default ON since
+2026-05-26 wire reversal — chunk-as-wire moves chunk handling from the PC
+VLA Provider to here, where the real-time 100 Hz loop lives).
 
 Trap: zip() over (old_v, new_v) would silently truncate on length mismatch;
 this function raises ValueError instead so a producer-side bug surfaces.
 
-TODO(REQ-34, REQ-38) [TASK-34]: vectorise with numpy for jitter-free 20Hz.
+TODO(REQ-34, REQ-38) [TASK-34]: vectorise with numpy for jitter-free 100Hz.
 """
 from typing import List
 

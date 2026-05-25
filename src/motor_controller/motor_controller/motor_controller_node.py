@@ -2,11 +2,13 @@
 100 Hz control loop driving the G1 SDK (REQ-34 v2026-05-22).
 
 Subscriptions:
-- /onboard/safety/validated_joint (JointCmd)     → joint_buf
+- /onboard/safety/validated_joint_chunk (JointCmdChunk)
+                                                 → unpack into joint_buf
                                                    (arm + low both arrive here;
                                                     distinguished by joint_names;
-                                                    carries chunk_id + step_index;
-                                                    chunk_id==0 = non-chunk producer)
+                                                    carries chunk_id; per-step
+                                                    step_index inside the chunk
+                                                    is for trace/log only)
 - /onboard/safety/estop (EstopFlag)              structured DDS context
 - /onboard/cmd/loco (LocoCommand)                LocoClient FSM dispatch (no buffer)
 - POSIX SHM byte 'safety_flag'                   zero-latency E-STOP poll
@@ -34,12 +36,28 @@ G1 SDK targets:
   overrun thresholds rerated against the 10 ms period (linspace(0,1,N) ramp
   count doubles to preserve ~2.0 s envelope).
 
+2026-05-26 wire reversal (CONV-006 REVISED — workstation repo):
+- /bridge/cmd/{arm,low} now carries JointCmdChunk (not single-step JointCmd).
+  Chunk-handling responsibility moves from PC to here. The PC publishes a
+  full action_horizon-step chunk per inference (~15 Hz); this node unpacks
+  each chunk's steps[] into joint_buf and paces them at 100 Hz.
+- Chunk-boundary crossfade is now CANONICAL on NX (queue_aggregate.crossfade()
+  default ON). On chunk_id transition we keep the tail of the previous
+  chunk still in joint_buf, crossfade it with the head of the new chunk,
+  then drop any remaining old-chunk tail (mid-chunk preemption).
+- Empty queue (underflow) holds the last popped step at 100 Hz so NX never
+  silently stops publishing during inference lag.
+- Non-chunk producers (teleop, CLI) MUST use a separate single-step
+  JointCmd topic per JointCmdChunk.msg comment — chunk_id==0 is no longer
+  meaningful inside this node.
+
 Traps:
 - estop_loco_action is a yaml string → method name. Validate with hasattr at
   startup; a typo otherwise blows up only on the first E-STOP.
-- crossfade lives at the PC VLA Provider per (a') wire decision; NX
-  queue_aggregate is OFF by default (chunk_size / crossfade_threshold_g
-  in yaml are scaffold for the fallback path).
+- crossfade is CANONICAL here (CONV-006 REVISED 2026-05-26). The yaml knobs
+  chunk_size / crossfade_threshold_g previously labelled "fallback path" are
+  now the live config for the canonical path — re-validate defaults when
+  wiring.
 - arm vs low routing is on joint_names — joint_name → SDK target mapping must
   be locked in motor_params.yaml; unknown joint name in a chunk = MALFORMED.
 
@@ -51,19 +69,24 @@ Real-time strategy:
 
 TODO(REQ-34) [TASK-34]: declare params + init unitree_sdk2_python (LocoClient + rt/arm_sdk + rt/lowcmd).
 TODO(REQ-35) [TASK-34]: validate estop_loco_action at startup; open SHM safety_flag.
-TODO(REQ-34) [TASK-34]: subscribers wired with push_joint_arm / push_joint_low / loco dispatch.
+TODO(REQ-34) [TASK-34]: subscribe JointCmdChunk on arm + low; loco dispatch.
+TODO(REQ-34) [TASK-34]: chunk-receipt path — detect chunk_id transition vs
+                        last seen; on transition, call crossfade(old_tail,
+                        new_chunk.steps), drop previous chunk tail, push
+                        blended sequence into joint_buf. No transition →
+                        append steps directly.
 TODO(REQ-34, REQ-38) [TASK-34]: 100 Hz control loop (busy-wait hybrid, gc.disable,
-                                 SHM poll, pop+execute, BufState publish).
+                                 SHM poll, pop+execute, BufState publish,
+                                 empty-queue last-step republish).
 TODO(REQ-35) [TASK-34]: ESTOP path — LocoClient.<estop_loco_action>() + arm weight
                          1.0→0.0 ramp + action_queue.flush().
-TODO(REQ-34) [TASK-34]: optional NX crossfade if step_index==0 with new chunk_id.
 TODO(REQ-34): re-rate arm weight ramp step count for 100 Hz period.
 """
 import rclpy
 from rclpy.node import Node
 
 from .action_queue import ActionQueue
-from .queue_aggregate import crossfade  # noqa: F401  (optional NX-side fallback)
+from .queue_aggregate import crossfade  # noqa: F401  (canonical chunk crossfade; CONV-006 REVISED)
 
 
 class MotorControllerNode(Node):
