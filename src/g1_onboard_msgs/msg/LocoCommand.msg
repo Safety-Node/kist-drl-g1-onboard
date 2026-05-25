@@ -1,6 +1,6 @@
 # LocoCommand — discrete G1 LocoClient action (anything other than continuous Move).
 #
-# Continuous walking uses geometry_msgs/Twist on /onboard/safety/validated_twist.
+# Continuous walking is low-level VLA via /onboard/cmd/low; this message is only for discrete LocoClient FSM transitions (StandUp / SitDown / BalanceStand / ZeroTorque).
 # This message is for one-shot LocoClient API calls that change the FSM.
 # motor_controller subscribes /onboard/cmd/loco and translates each value into
 # the matching unitree_sdk2_python LocoClient method call (bypasses queue).

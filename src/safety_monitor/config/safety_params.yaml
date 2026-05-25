@@ -8,18 +8,12 @@ safety_monitor:
     estop_shm_name: "safety_flag"
     estop_heartbeat_hz: 1.0        # EstopFlag DDS heartbeat (ICD lock)
 
-    # Velocity limits on cmd_vel (Twist)
-    max_linear_x: 0.8              # m/s   — TBD
-    max_linear_y: 0.5              # m/s   — TBD
-    max_angular_z: 1.0             # rad/s — TBD
-
     # Proximity E-STOP (RealSense Depth only; LiDAR removed 2026-05-14)
     proximity_min_dist_m: 0.30
     proximity_depth_pixel_thresh: 50    # WARNING: absolute count, assumes 1280×720
                                         # depth. Rescale if profile changes.
 
-    # Comms watchdog (per-stream — cmd_vel idle is legitimate, cmd/arm idle is not)
-    cmd_vel_timeout_s: 2.0
+    # Comms watchdog (per-stream — cmd/arm idle is not legitimate)
     cmd_arm_timeout_s: 0.5
 
     # Joint rate-of-change (single scalar intentional for demo;

@@ -3,9 +3,8 @@
 
 std_msgs/Header header
 
-float32 velocity_fill        # velocity_buf fill ratio, 0.0–1.0
 float32 joint_fill           # joint_buf    fill ratio, 0.0–1.0
-float32 control_rate_hz      # measured loop frequency (target: 20.0)
+float32 control_rate_hz      # measured loop frequency (target: 100.0 per REQ-38)
 uint32  last_cmd_age_ms      # ms since last JointCmd pop from /onboard/safety/validated_joint
                              # (any sender). Velocity stream NOT tracked here.
 

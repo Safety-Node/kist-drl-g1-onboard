@@ -3,8 +3,8 @@
 
 motor_controller:
   ros__parameters:
-    # Control loop (20 Hz tick = 50 ms; matches VLA chunk step rate)
-    control_rate_hz: 20            # rt/arm_sdk native 250 Hz; consider 250 Hz interp if jerky
+    # Control loop (100 Hz tick = 10 ms; matches REQ-38 motor target)
+    control_rate_hz: 100           # rt/arm_sdk native 250 Hz; consider 250 Hz interp if jerky
     busy_wait_fraction: 0.2        # last 20% of tick busy-wait for low jitter
 
     # Ring buffer (action_queue)
@@ -19,8 +19,8 @@ motor_controller:
 
     # rt/arm_sdk blending (motor_cmd[29].q = weight ∈ [0,1])
     arm_default_weight: 1.0
-    arm_weight_ramp_steps: 101     # linspace(0, 1, 101) = 100 intervals × 20 ms = 2.0 s
-    arm_weight_ramp_dt: 0.02       # verify np.linspace(endpoint=True) at impl
+    arm_weight_ramp_steps: 201     # linspace(0, 1, 201) = 200 intervals × 10 ms = 2.0 s
+    arm_weight_ramp_dt: 0.01       # verify np.linspace(endpoint=True) at impl
 
     # LocoCommand routing — startup-validate via hasattr(loco_client, estop_loco_action)
     # (yaml typo otherwise blows up on first E-STOP).

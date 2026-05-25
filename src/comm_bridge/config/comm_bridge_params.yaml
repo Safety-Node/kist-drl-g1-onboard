@@ -37,7 +37,7 @@ outbound_relay:
         dst:  "/bridge/sensors/joint_states"
         type: "sensor_msgs/msg/JointState"
         qos:  "best_effort"
-      - src:  "/onboard/sensors/imu/data"
+      - src:  "/onboard/sensors/imu/base"
         dst:  "/bridge/sensors/imu"
         type: "sensor_msgs/msg/Imu"
         qos:  "best_effort"

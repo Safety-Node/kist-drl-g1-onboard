@@ -11,7 +11,7 @@ the previous chunk drained:
 Canonical crossfade lives at the PC VLA Provider (next to inference).
 This function is the NX-side fallback, activated when motor_controller
 detects a chunk boundary (step_index==0 with a new chunk_id). OFF by
-default. velocity_buf is unaffected (LocoClient handles walking inertia).
+default.
 
 Trap: zip() over (old_v, new_v) would silently truncate on length mismatch;
 this function raises ValueError instead so a producer-side bug surfaces.

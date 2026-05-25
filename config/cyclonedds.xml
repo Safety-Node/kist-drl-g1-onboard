@@ -17,7 +17,7 @@
   Verification at first integration (TODO(REQ-32, REQ-33)):
     On NX:  ros2 topic list      # /onboard/* and /bridge/* both visible
     On PC:  ros2 topic list      # only /bridge/* should be visible
-    On PC:  ros2 topic echo /onboard/sensors/imu/data   # should hang (no data)
+    On PC:  ros2 topic echo /onboard/sensors/imu/base   # should hang (no data)
 
   Naming caveat:
     ROS 2 wraps the user-facing name "/foo/bar" into the DCPS topic "rt/foo/bar"

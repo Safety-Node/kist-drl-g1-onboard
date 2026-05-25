@@ -11,7 +11,7 @@ cost is negligible at the 100 Hz lowstate rate, and ownership becomes
 symmetric with the topic prefix (node name ↔ /onboard/sensors/imu/*).
 
 Publications:
-- /onboard/sensors/imu/data         (sensor_msgs/Imu)  base IMU,
+- /onboard/sensors/imu/base         (sensor_msgs/Imu)  base IMU,
                                                        frame_id = base_link
 - /onboard/sensors/imu/ankle_left   (sensor_msgs/Imu)  frame_id = ankle_left_link
 - /onboard/sensors/imu/ankle_right  (sensor_msgs/Imu)  frame_id = ankle_right_link

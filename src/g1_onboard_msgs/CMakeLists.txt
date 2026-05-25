@@ -16,7 +16,6 @@ set(msg_files
   "msg/AudioPCM.msg"
   "msg/JointCmd.msg"
   "msg/LocoCommand.msg"
-  "msg/NavState.msg"
   "msg/BufState.msg"
   "msg/SpeakerState.msg"
   "msg/EstopFlag.msg"
