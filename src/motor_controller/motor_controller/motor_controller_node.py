@@ -29,12 +29,17 @@ G1 SDK targets:
 - LOCO_CMD      → LocoClient.<method>() from LocoCommand.action
 - ESTOP         → LocoClient.Damp() + arm weight 1.0→0.0 ramp + flush
 
-2026-05-22 KIST mail:
-- VELOCITY_CMD mode / LocoClient.Move(vx, vy, vyaw) dropped — walking is now
-  low-level VLA via /cmd/low. velocity_buf removed.
+2026-05-22 KIST mail (later partly reversed — see 2026-05-26 below):
 - Loop rate 20 Hz → 100 Hz. Existing 20 ms ramp / busy-wait hybrid timer /
   overrun thresholds rerated against the 10 ms period (linspace(0,1,N) ramp
   count doubles to preserve ~2.0 s envelope).
+
+2026-05-26 KIST 회의 (workstation CONV-012, partly reverses 2026-05-22):
+- velocity_buf restored (5/26). PC NavigationProvider 발행 Twist 를
+  velocity_buf 에 enqueue, 100 Hz loop 가 pop 해서
+  LocoClient.Move(vx, vy, vyaw) 호출. Walking 은 PC NavigationProvider
+  (Unitree SDK loco_client) 가 처리하며 더 이상 low-level VLA 가 아니다.
+  VELOCITY_CMD 디스패치 모드 부활. CONV-005 범위 축소 (arm/hand only).
 
 2026-05-26 wire reversal (CONV-006 REVISED — workstation repo):
 - /bridge/cmd/{arm,low} now carries JointCmdChunk (not single-step JointCmd).

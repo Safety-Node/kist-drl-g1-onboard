@@ -248,9 +248,14 @@ commands; full usage scope is TBD.
 ### Affected
 - (deleted) `src/navigation/` package
 - `src/motor_controller/` — `/bridge/cmd/low` route added, VELOCITY_CMD
-  mode dropped
+  mode dropped (부활 2026-05-26: workstation CONV-012 로 PC
+  NavigationProvider 가 다시 `/bridge/cmd/vel` 발행. velocity_buf /
+  VELOCITY_CMD / LocoClient.Move 의미 복원. EstopFlag.REASON_VELOCITY 도
+  부활.)
 - `src/safety_monitor/` — validates `/bridge/cmd/{arm,low}` instead of
-  `Validated Twist`
+  `Validated Twist` (2026-05-26: cmd_vel watchdog 도 다시 active —
+  per-stream comms watchdog 만, validated_twist publication 은 여전히
+  dropped.)
 
 ---
 
