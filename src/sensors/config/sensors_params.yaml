@@ -25,6 +25,46 @@ joint_state_node:
     publish_rate_hz: 100
     network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
     domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
+    # 인덱스는 LowState_.motor_state[i]와 1:1 매핑. safety_monitor의 joint_limits 키와
+    # 정확히 같아야 함 (불일치 시 EstopFlag.REASON_MALFORMED_CMD).
+    # 변형별 비활성 관절:
+    #   29-DoF (waist locked): 13(waist_roll), 14(waist_pitch) — 명목상 존재, 잠금
+    #   23-DoF: 13, 14, 20, 21, 27, 28 모두 잠금
+    joint_names:
+      # Left leg (0-5)
+      - left_hip_pitch        # 0
+      - left_hip_roll         # 1
+      - left_hip_yaw          # 2
+      - left_knee             # 3
+      - left_ankle_pitch      # 4   (= left_ankle_b in AB mode)
+      - left_ankle_roll       # 5   (= left_ankle_a in AB mode)
+      # Right leg (6-11)
+      - right_hip_pitch       # 6
+      - right_hip_roll        # 7
+      - right_hip_yaw         # 8
+      - right_knee            # 9
+      - right_ankle_pitch     # 10  (= right_ankle_b)
+      - right_ankle_roll      # 11  (= right_ankle_a)
+      # Waist (12-14)
+      - waist_yaw             # 12
+      - waist_roll            # 13  (locked on 29-DoF/23-DoF)
+      - waist_pitch           # 14  (locked on 29-DoF/23-DoF)
+      # Left arm (15-21)
+      - left_shoulder_pitch   # 15
+      - left_shoulder_roll    # 16
+      - left_shoulder_yaw     # 17
+      - left_elbow            # 18
+      - left_wrist_roll       # 19
+      - left_wrist_pitch      # 20  (locked on 23-DoF)
+      - left_wrist_yaw        # 21  (locked on 23-DoF)
+      # Right arm (22-28)
+      - right_shoulder_pitch  # 22
+      - right_shoulder_roll   # 23
+      - right_shoulder_yaw    # 24
+      - right_elbow           # 25
+      - right_wrist_roll      # 26
+      - right_wrist_pitch     # 27  (locked on 23-DoF)
+      - right_wrist_yaw       # 28  (locked on 23-DoF)
 
 # [TASK-38] IMU streaming — base + ankle L/R (single owner since 2026-05-23 refactor;
 # reverses 2026-05-15 fan-out via joint_state_node).
