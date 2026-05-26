@@ -1,8 +1,12 @@
 """
-Lock-free Ring Buffer for safety-validated motor commands.
+Lock-free Ring Buffers for safety-validated motor commands.
 
-ONE SPSC FIFO:
-  joint_buf     : rt/arm_sdk joint commands      (producer: _on_validated_joint)
+Re-enabled 2026-05-26 per 0526 KIST meeting — navigation reverted to
+Unitree SDK loco_client (vx/vy/vyaw) until VLA-based locomotion confirmed.
+
+Two SPSC FIFOs (4-mode taxonomy: VELOCITY / JOINT / LOCO / ESTOP):
+  velocity_buf  : cmd_vel Twist commands              (producer: _on_validated_velocity)
+  joint_buf     : rt/arm_sdk joint commands           (producer: _on_validated_joint)
   consumer      : control loop
 
 LOCO_CMD remains a one-shot RPC concern (bypasses queue); ESTOP is an
@@ -15,6 +19,7 @@ record the eviction for /onboard/motor/buf_state.
 
 Counter ownership (kept single-writer to survive MultiThreadedExecutor
 without locks or GIL reliance):
+  _velocity_overrun_count : velocity producer
   _joint_overrun_count    : joint producer
   _underrun_count         : control loop (sole popper)
 
@@ -26,6 +31,13 @@ from typing import Any, Deque
 
 
 @dataclass
+class VelocityCommand:
+    """Velocity command (Twist via PC NavigationProvider → comm_bridge → cmd_vel)."""
+    twist: Any   # geometry_msgs.msg.Twist
+    stamp_ns: int = 0
+
+
+@dataclass
 class JointCommand:
     """Joint command awaiting rt/arm_sdk publish. Carries chunk_id / step_index / weight."""
     joint: Any   # g1_onboard_msgs.msg.JointCmd
@@ -33,13 +45,21 @@ class JointCommand:
 
 
 class ActionQueue:
-    """Joint commands in a single ring buffer."""
+    """Velocity + joint commands in two SPSC ring buffers."""
 
     def __init__(self, slots: int = 64) -> None:
         self._slots = slots
+        self._velocity_buf: Deque[VelocityCommand] = deque(maxlen=slots)
         self._joint_buf: Deque[JointCommand] = deque(maxlen=slots)
+        self._velocity_overrun_count: int = 0
         self._joint_overrun_count: int = 0
         self._underrun_count: int = 0
+
+    def push_velocity(self, cmd: VelocityCommand) -> None:
+        raise NotImplementedError('TODO(REQ-34) [TASK-34]: push_velocity')
+
+    def pop_velocity(self) -> VelocityCommand | None:
+        raise NotImplementedError('TODO(REQ-34) [TASK-34]: pop_velocity')
 
     def push_joint(self, cmd: JointCommand) -> None:
         raise NotImplementedError('TODO(REQ-34) [TASK-34]: push_joint')
@@ -51,13 +71,16 @@ class ActionQueue:
         """E-STOP path: drop every pending command atomically (counters untouched)."""
         raise NotImplementedError('TODO(REQ-34) [TASK-34]: flush')
 
-    def fill_ratio(self) -> float:
-        return len(self._joint_buf) / self._slots
+    def fill_ratio(self) -> tuple[float, float]:
+        return (
+            len(self._velocity_buf) / self._slots,
+            len(self._joint_buf) / self._slots,
+        )
 
     @property
     def overrun_count(self) -> int:
-        """Joint buffer overrun count. Single-writer."""
-        return self._joint_overrun_count
+        """Sum of velocity + joint buffer overruns. Single-writer per field."""
+        return self._velocity_overrun_count + self._joint_overrun_count
 
     @property
     def underrun_count(self) -> int:

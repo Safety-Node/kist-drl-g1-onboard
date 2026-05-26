@@ -9,7 +9,7 @@ bool active                   # true while latched
 # REASON_* trigger semantics:
 #   NONE           default; not a real reason (active=false)
 #   JOINT_LIMIT    JointCmd q/dq/tau out of yaml range
-#   VELOCITY       reserved (formerly cmd_vel Twist limits; cmd_vel path retired 2026-05-22).
+#   VELOCITY       Twist (vx/vy/vyaw) exceeded max_linear_x/y or max_angular_z
 #   PROXIMITY      Depth front-cone pixel count above threshold
 #   COMMS_TIMEOUT  external input stream silent > per-stream timeout (other side stopped)
 #   WATCHDOG       safety_monitor's own loop overran or heartbeat missed (we stopped)
