@@ -23,7 +23,7 @@ speaker_node:
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
-    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
+    network_interface: "eno2"     # TBD: confirm NX↔G1 LAN interface
     domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
     # 인덱스는 LowState_.motor_state[i]와 1:1 매핑. safety_monitor의 joint_limits 키와
     # 정확히 같아야 함 (불일치 시 EstopFlag.REASON_MALFORMED_CMD).
