@@ -33,10 +33,6 @@ from unitree_sdk2py.core.channel import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
 
-# -----------------------------------------------------------------------------
-# lowstate → JointState 변환 (순수 함수, 단위 테스트 가능)
-#   LowState_.motor_state[i].q/dq/tau_est → JointState.position/velocity/effort[i]
-# -----------------------------------------------------------------------------
 def to_joint_state(lowstate, joint_names: Sequence[str], stamp) -> JointState:
     js = JointState()
     js.header.stamp = stamp
@@ -67,8 +63,6 @@ class JointStateNode(Node):
         nic = str(self.get_parameter('network_interface').value)
         domain = int(self.get_parameter('domain_id').value)
 
-        # G1 SDK DDS participant 초기화 — process당 한 번. NIC 빈 문자열이면
-        # SDK가 기본 인터페이스 자동 선택 (peek_lowstate.py 와 같은 패턴).
         if nic:
             ChannelFactoryInitialize(domain, nic)
         else:
@@ -90,11 +84,9 @@ class JointStateNode(Node):
             f'domain={domain}, nic={nic or "default"})')
 
     def _on_lowstate(self, msg: LowState_) -> None:
-        """SDK 콜백: 최신 프레임 캐싱 (SDK 스레드에서 호출됨)."""
         self._latest = msg
 
     def _tick(self) -> None:
-        """ROS 타이머: 최신 프레임을 JointState로 변환해 publish."""
         ls = self._latest
         if ls is None:
             return  # 아직 첫 프레임 수신 전 — silently skip
