@@ -1,72 +1,25 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<!--
-  CycloneDDS configuration for G1 Onboard.
-
-  - NX and PC share the same Domain ID. Topics under '/onboard/...' must NOT leave
-    NX, while topics under '/bridge/...' are allowed to cross the Ethernet link.
-  - We enforce the split with DDS NetworkPartitions: any topic whose ROS name
-    starts with '/onboard/' is bound to a loopback-only partition, so other
-    processes on the same NX host (notably comm_bridge) can still subscribe but
-    the PC cannot see the traffic.
-
-  Usage (NX side):
-    export CYCLONEDDS_URI=file://$(pwd)/config/cyclonedds.xml
-    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-    ros2 launch comm_bridge comm_bridge.launch.py
-
-  Verification at first integration (TODO(REQ-32, REQ-33)):
-    On NX:  ros2 topic list      # /onboard/* and /bridge/* both visible
-    On PC:  ros2 topic list      # only /bridge/* should be visible
-    On PC:  ros2 topic echo /onboard/sensors/imu/base   # should hang (no data)
-
-  Naming caveat:
-    ROS 2 wraps the user-facing name "/foo/bar" into the DCPS topic "rt/foo/bar"
-    for default-QoS publishers, "rq/" for service requests, "rr/" for service
-    replies. The PartitionMapping below uses "rt/onboard/*" — extend to other
-    prefixes if comm_bridge ever bridges services or actions.
--->
-<CycloneDDS xmlns="https://cdds.io/config"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
-  <Domain Id="any">
-    <General>
-      <!-- TODO(REQ-33): pin NetworkInterfaceAddress to the NX↔PC LAN interface. -->
-      <Interfaces>
-        <NetworkInterface autodetermine="true" priority="default" multicast="default"/>
-      </Interfaces>
-      <AllowMulticast>default</AllowMulticast>
-      <MaxMessageSize>65500B</MaxMessageSize>
-    </General>
-
-    <!--
-      Keep /onboard/* topics off the LAN by binding them to the loopback
-      partition. comm_bridge (on the same host as the publishers) still sees
-      them via 127.0.0.1; remote subscribers on the PC do not.
-    -->
-    <Partitioning>
-      <NetworkPartitions>
-        <NetworkPartition name="OnboardLocal" address="127.0.0.1"/>
-      </NetworkPartitions>
-      <PartitionMappings>
-        <!--
-          DCPSPartitionTopic syntax: "<partition_pattern>.<topic_pattern>".
-          ROS 2 publishers do not set DCPS partitions, so the partition part
-          is "*" (wildcard) and we match by topic name only.
-        -->
-        <PartitionMapping DCPSPartitionTopic="*.rt/onboard/*" NetworkPartition="OnboardLocal"/>
-      </PartitionMappings>
-    </Partitioning>
-
-    <Internal>
-      <!-- Tight latency budget — favour shared-memory transport on NX. -->
-      <Watermarks>
-        <WhcHigh>2MB</WhcHigh>
-      </Watermarks>
-    </Internal>
-
-    <Tracing>
-      <Verbosity>warning</Verbosity>
-      <OutputFile>stderr</OutputFile>
-    </Tracing>
-  </Domain>
-</CycloneDDS>
+ <?xml version="1.0" encoding="UTF-8" ?>
+ <CycloneDDS xmlns="https://cdds.io/config"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+   <Domain Id="any">
+     <General>
+       <Interfaces>
+         <NetworkInterface name="eth0" priority="default" multicast="default"/>
+       </Interfaces>
+       <AllowMulticast>default</AllowMulticast>
+       <MaxMessageSize>65500B</MaxMessageSize>
+     </General>
+ 
+     <Internal>
+       <Watermarks>
+         <WhcHigh>2MB</WhcHigh>
+       </Watermarks>
+     </Internal>
+ 
+     <Tracing>
+       <Verbosity>warning</Verbosity>
+       <OutputFile>stderr</OutputFile>
+     </Tracing>
+   </Domain>
+ </CycloneDDS>

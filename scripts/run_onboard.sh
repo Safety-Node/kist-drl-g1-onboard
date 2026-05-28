@@ -4,7 +4,7 @@
 # For production deployment on the Orin NX, safety_monitor and motor_controller
 # are run as systemd services instead — see src/{safety_monitor,motor_controller}/systemd/.
 
-set -euo pipefail
+set -eo pipefail
 
 ROS_DISTRO=${ROS_DISTRO:-humble}
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +18,7 @@ source "${REPO_ROOT}/install/setup.bash"
 # Apply CycloneDDS config (partition filtering for /onboard/* topics).
 export CYCLONEDDS_URI="file://${REPO_ROOT}/config/cyclonedds.xml"
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
 
 declare -a PIDS=()
 
