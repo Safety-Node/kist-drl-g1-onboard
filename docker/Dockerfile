@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y \
     net-tools \
     libssl-dev \
     libffi-dev \
+    usbutils \
     && locale-gen en_US en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
@@ -67,6 +68,31 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rosdep init || true && rosdep update
+
+# -----------------------------------------------------------------------------
+# Intel RealSense SDK + ROS 2 wrapper (D435i)
+#
+# Adds Intel's apt repo with GPG key FB0B24895113F120, then installs:
+#   - librealsense2-utils/dev: SDK + rs-enumerate-devices, etc.
+#   - ros-humble-realsense2-camera: ROS wrapper providing /camera/* topics
+#   - cv-bridge + python3-opencv: for snapshot/debug scripts
+#
+# Note: librealsense2-dkms is intentionally excluded (host kernel module,
+# meaningless inside a container).
+# -----------------------------------------------------------------------------
+RUN mkdir -p /etc/apt/keyrings && \
+    gpg --keyserver keyserver.ubuntu.com --recv-keys FB0B24895113F120 && \
+    gpg --export FB0B24895113F120 > /etc/apt/keyrings/librealsense.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/librealsense.gpg] https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/librealsense.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        librealsense2-utils \
+        librealsense2-dev \
+        ros-humble-realsense2-camera \
+        ros-humble-realsense2-description \
+        ros-humble-cv-bridge \
+        python3-opencv \
+    && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
 # Python packaging
