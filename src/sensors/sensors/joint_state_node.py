@@ -16,10 +16,8 @@ Source: unitree_sdk2py ChannelSubscriber on 'rt/lowstate' (unitree_hg.LowState_)
         Callback runs in the SDK thread; the ROS timer publishes the latest
         cached frame at publish_rate_hz. 로봇 없이 돌릴 때는 별도 fake
         publisher 스크립트가 rt/lowstate에 가짜 프레임을 쏘면 됨.
-
-TODO(REQ-42) [TASK-32]: motor_state 35 슬롯 중 G1 활성 29개 정확한 인덱스 확정
-                        (현재는 0..N-1로 가정, joint_names 길이만큼만 사용).
 """
+
 from typing import List, Optional, Sequence
 
 import rclpy
