@@ -9,6 +9,10 @@ in the launch file — see comm_bridge.launch.py.
 Each relay entry (src, dst, type, qos) creates one subscriber + one publisher.
 Message types are imported dynamically: "sensor_msgs/msg/Imu" becomes
   from sensor_msgs.msg import Imu
+
+Echo-loop guard: entries where src and dst share the same namespace prefix
+(both /onboard/ or both /bridge/) are rejected at load time to prevent
+accidental routing loops.
 """
 import importlib
 
@@ -48,6 +52,14 @@ def _load_relays(yaml_path: str) -> list:
     return doc.get("outbound_relay", {}).get("ros__parameters", {}).get("relays", [])
 
 
+def _is_echo_loop(src: str, dst: str) -> bool:
+    """Return True if src and dst share the same top-level namespace prefix."""
+    for prefix in ("/onboard/", "/bridge/"):
+        if src.startswith(prefix) and dst.startswith(prefix):
+            return True
+    return False
+
+
 class OutboundRelay(Node):
     def __init__(self) -> None:
         super().__init__("outbound_relay")
@@ -69,6 +81,12 @@ class OutboundRelay(Node):
             dst = entry["dst"]
             type_str = entry["type"]
             qos_key = entry.get("qos", "best_effort")
+
+            if _is_echo_loop(src, dst):
+                self.get_logger().error(
+                    f"Echo-loop detected: {src} → {dst} share same prefix — skipping"
+                )
+                continue
 
             try:
                 msg_cls = _load_msg_class(type_str)
