@@ -15,6 +15,12 @@ safety_monitor:
 
     # Comms watchdog (per-stream — cmd/arm idle is not legitimate)
     cmd_arm_timeout_s: 0.5
+    cmd_vel_timeout_s: 2.0          # watchdog for PC Twist (NavigationProvider). REQ-35.
+
+    # Velocity limits on cmd_vel (Twist via PC NavigationProvider → comm_bridge)
+    max_linear_x: 0.6               # m/s, conservative
+    max_linear_y: 0.4               # m/s
+    max_angular_z: 0.8              # rad/s
 
     # Joint rate-of-change (single scalar intentional for demo;
     # promote to per-joint 5th field of joint_limits before deployment)

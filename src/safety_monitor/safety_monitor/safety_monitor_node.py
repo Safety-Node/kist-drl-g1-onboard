@@ -17,12 +17,18 @@ Publications:
 By-design exclusions: /onboard/cmd/loco bypasses this node (motor_controller
 dispatches LocoClient FSM directly).
 
-2026-05-22 KIST mail:
-- cmd_vel path retired (navigation package removed + walking is now low-level
-  VLA via /cmd/low). validated_twist publication dropped accordingly.
+2026-05-22 KIST mail (later partly reversed — see 2026-05-26 below):
 - Validation now runs at 100 Hz (REQ-34 v2026-05-22) — joint_limits / velocity
   bounds / proximity check / rate watchdog all need rerating; E-STOP budget
   remains 200 ms.
+
+2026-05-26 KIST 회의 (workstation CONV-012, partly reverses 2026-05-22):
+- cmd_vel watchdog active 다시: PC NavigationProvider Twist 부활했으므로
+  /onboard/cmd/vel 도 per-stream comms watchdog 대상이다.
+  validated_twist 는 여전히 dropped — motor_controller 가 PC Twist 받아
+  LocoClient.Move 직접 호출 (no safety-side velocity validation in this
+  iteration; safety budget covered by motor_controller's own LocoClient
+  dispatch + the existing joint-level safety_monitor on arm/low).
 
 Traps:
 - joint_limits in yaml is dict-of-list → load via get_parameters_by_prefix.
