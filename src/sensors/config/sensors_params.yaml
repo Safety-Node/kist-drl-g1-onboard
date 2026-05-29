@@ -30,12 +30,18 @@ joint_state_node:
 # reverses 2026-05-15 fan-out via joint_state_node).
 # Base IMU from G1 SDK lowstate (own subscription, parallel to joint_state_node).
 # Ankle IMU source TBD; placeholder publish until KIST/SDK confirms channel.
+# Ankle placeholder messages carry orientation_covariance[0] = -1 (REP 145:
+# measurement unavailable) — GearSonic consumers must check before trusting.
 imu_node:
   ros__parameters:
     publish_rate_hz: 100
     imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
+    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface (mirrors joint_state_node)
+    domain_id: 0                  # TBD: pin to SDK-specific domain (mirrors joint_state_node)
+    # NOTE: network_interface + domain_id are read by main() BEFORE rclpy.init()
+    # (SDK init must precede ROS init). These params are informational mirrors only.
     # TBD: real ankle IMU source. lowstate is consumed by both joint_state_node
     # and this node (DDS multi-subscriber, negligible cost); check whether G1
     # SDK exposes ankle IMU on a separate channel or if it must be derived
