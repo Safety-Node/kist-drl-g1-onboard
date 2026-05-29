@@ -148,9 +148,14 @@ def test_queue_drops_oldest_on_overflow(node):
 # --------------------------------------------------------------------------
 # SpeakerState transitions
 # --------------------------------------------------------------------------
-def test_initial_state_is_idle(node):
-    assert node._states[0].playing is False
-    assert node._states[0].current_chunk_id == IDLE_CHUNK_ID
+def test_idle_state_representation(node):
+    # __init__ already emitted the first idle state via the real publisher
+    # (before this fixture swapped in the capture hook), so publish once more
+    # now that nothing is queued and the node is still idle.
+    node._publish_state()
+    assert node._states[-1].playing is False
+    assert node._states[-1].current_chunk_id == IDLE_CHUNK_ID
+    assert node._states[-1].queue_depth == 0
 
 
 def test_push_publishes_state(node):
