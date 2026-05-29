@@ -1,25 +1,66 @@
- <?xml version="1.0" encoding="UTF-8" ?>
- <CycloneDDS xmlns="https://cdds.io/config"
-             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
-   <Domain Id="any">
-     <General>
-       <Interfaces>
-         <NetworkInterface name="eth0" priority="default" multicast="default"/>
-       </Interfaces>
-       <AllowMulticast>default</AllowMulticast>
-       <MaxMessageSize>65500B</MaxMessageSize>
-     </General>
- 
-     <Internal>
-       <Watermarks>
-         <WhcHigh>2MB</WhcHigh>
-       </Watermarks>
-     </Internal>
- 
-     <Tracing>
-       <Verbosity>warning</Verbosity>
-       <OutputFile>stderr</OutputFile>
-     </Tracing>
-   </Domain>
- </CycloneDDS>
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+
+  <!--
+    Domain 0: NX-internal only.
+    All /onboard/* nodes (sensors, motor_controller, safety_monitor) run here.
+    Loopback interface only — domain-0 traffic never leaves the container.
+  -->
+  <Domain Id="0">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="lo" priority="default" multicast="false"/>
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <Peers>
+        <Peer address="localhost"/>
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
+    </Discovery>
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+
+  <!--
+    Domain 1: Bridge domain shared with the workstation PC.
+    outbound_relay and inbound_relay publish/subscribe here to exchange
+    /bridge/* topics with the PC. eth0 + loopback so relay nodes on the
+    same host can also discover each other.
+    DDS_PEER_IP must be set to the workstation IP before launch.
+  -->
+  <Domain Id="1">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="eth0" priority="default" multicast="false"/>
+        <NetworkInterface name="lo"   priority="default" multicast="false"/>
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+    <Discovery>
+      <Peers>
+        <Peer address="localhost"/>
+        <Peer address="${DDS_PEER_IP}"/>
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
+    </Discovery>
+    <Internal>
+      <Watermarks>
+        <WhcHigh>2MB</WhcHigh>
+      </Watermarks>
+    </Internal>
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+
+</CycloneDDS>
