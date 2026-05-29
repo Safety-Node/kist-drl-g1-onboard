@@ -19,6 +19,8 @@ source "${REPO_ROOT}/install/setup.bash"
 export CYCLONEDDS_URI="file://${REPO_ROOT}/config/cyclonedds.xml"
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+# Workstation IP for unicast peer discovery (NetworkPartition requires this).
+export DDS_PEER_IP=${DDS_PEER_IP:-192.168.123.222}
 
 declare -a PIDS=()
 

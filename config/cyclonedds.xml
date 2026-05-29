@@ -1,25 +1,57 @@
- <?xml version="1.0" encoding="UTF-8" ?>
- <CycloneDDS xmlns="https://cdds.io/config"
-             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
-   <Domain Id="any">
-     <General>
-       <Interfaces>
-         <NetworkInterface name="eth0" priority="default" multicast="default"/>
-       </Interfaces>
-       <AllowMulticast>default</AllowMulticast>
-       <MaxMessageSize>65500B</MaxMessageSize>
-     </General>
- 
-     <Internal>
-       <Watermarks>
-         <WhcHigh>2MB</WhcHigh>
-       </Watermarks>
-     </Internal>
- 
-     <Tracing>
-       <Verbosity>warning</Verbosity>
-       <OutputFile>stderr</OutputFile>
-     </Tracing>
-   </Domain>
- </CycloneDDS>
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <!--
+        eth0: NX↔PC data plane.
+        lo:   required for NetworkPartition address="127.0.0.1" to bind.
+              multicast disabled on lo so it never becomes the primary interface.
+      -->
+      <Interfaces>
+        <NetworkInterface name="eth0" priority="default" multicast="true"/>
+        <NetworkInterface name="lo"   priority="default" multicast="false"/>
+      </Interfaces>
+      <!--
+        Unicast-only peer discovery: explicitly list the PC as a peer so
+        loopback partition and eth0 discovery can coexist without multicast
+        conflicts. DDS_PEER_IP must be set to the workstation IP before launch.
+      -->
+      <AllowMulticast>false</AllowMulticast>
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+
+    <Discovery>
+      <Peers>
+        <Peer address="${DDS_PEER_IP}"/>
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+    </Discovery>
+
+    <!--
+      Keep /onboard/* topics off the LAN by binding them to the loopback
+      partition. outbound_relay (same host) still subscribes via 127.0.0.1;
+      the PC never sees /onboard/* traffic.
+    -->
+    <Partitioning>
+      <NetworkPartitions>
+        <NetworkPartition name="OnboardLocal" address="127.0.0.1"/>
+      </NetworkPartitions>
+      <PartitionMappings>
+        <PartitionMapping DCPSPartitionTopic="*.rt/onboard/*" NetworkPartition="OnboardLocal"/>
+      </PartitionMappings>
+    </Partitioning>
+
+    <Internal>
+      <Watermarks>
+        <WhcHigh>2MB</WhcHigh>
+      </Watermarks>
+    </Internal>
+
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+</CycloneDDS>
