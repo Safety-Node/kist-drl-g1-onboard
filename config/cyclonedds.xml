@@ -24,6 +24,7 @@
 
     <Discovery>
       <Peers>
+        <Peer address="localhost"/>
         <Peer address="${DDS_PEER_IP}"/>
       </Peers>
       <ParticipantIndex>auto</ParticipantIndex>
