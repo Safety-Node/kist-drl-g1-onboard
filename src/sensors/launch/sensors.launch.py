@@ -97,11 +97,14 @@ def generate_launch_description():
             cam.get('depth_fps', 30),
         )
 
-        # Topics: /onboard/sensors/{color,depth}/...  (see TASK-32 for camera_name='' rationale)
+        # Topics: /onboard/sensors/camera/{color,depth}/...
+        # camera_name must be non-empty: rs_launch.py maps it to the node name
+        # (name=LaunchConfiguration('camera_name')), and ROS rejects an empty
+        # node name with "Invalid node name: node name must not be empty".
         external_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(realsense_launch_file),
             launch_arguments={
-                'camera_name':                '',
+                'camera_name':                'camera',
                 'camera_namespace':           '/onboard/sensors',
                 'enable_color':               str(cam.get('enable_color', True)).lower(),
                 'enable_depth':               str(cam.get('enable_depth', True)).lower(),
