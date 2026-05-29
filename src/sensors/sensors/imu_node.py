@@ -21,17 +21,18 @@ so downstream consumers (GearSonic) can detect and reject them.
 Swap placeholder for real reads once SDK source is confirmed (REQ-42).
 
 SDK init order (IMPORTANT): ChannelFactory.Instance().Init() must be called
-before rclpy.init(). main() pre-parses sensors_params.yaml to extract
-network_interface and domain_id before the ROS node is constructed.
+AFTER rclpy.init() / super().__init__() so that rmw_cyclonedds_cpp initialises
+the CycloneDDS library first.  Calling it before rclpy.init() causes a
+"Precondition Not Met" domain conflict because two initialisations race on the
+same CycloneDDS instance.  SDK init therefore lives in ImuNode.__init__() after
+super().__init__(), using ROS params that are available at that point.
 
 TODO(REQ-42): confirm G1 SDK ankle IMU channel; swap placeholder for real read.
 TODO(REQ-42): paired timestamp if both ankles share a frame from the same SDK sample.
 """
-import os
 import threading
 
 import rclpy
-import yaml
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu
@@ -98,19 +99,24 @@ class ImuNode(Node):
         self._pub_ankle_r = self.create_publisher(
             Imu, '/onboard/sensors/imu/ankle_right', _QOS_SENSOR)
 
-        # --- SDK lowstate subscriber ------------------------------------------
+        # --- SDK init + lowstate subscriber -----------------------------------
+        # SDK init MUST come after super().__init__() so that rmw_cyclonedds_cpp
+        # initialises the CycloneDDS library first (avoids "Precondition Not Met").
         self._latest_lowstate = None
         self._lowstate_lock = threading.Lock()
 
         if _SDK_AVAILABLE:
+            network_interface = self.get_parameter('network_interface').value
+            domain_id = int(self.get_parameter('domain_id').value)
             try:
+                ChannelFactory.Instance().Init(domain_id, network_interface)
                 sub = ChannelSubscriber('rt/lf/lowstate', unitree_go_msg_dds__LowState_)
                 sub.Init(self._on_lowstate, 10)
                 self._lowstate_sub = sub  # keep reference so GC doesn't collect it
                 self.get_logger().info('imu_node: G1 SDK lowstate subscriber active')
             except Exception as exc:
                 self.get_logger().error(
-                    f'imu_node: failed to init lowstate subscriber: {exc} — '
+                    f'imu_node: failed to init SDK / lowstate subscriber: {exc} — '
                     'base IMU will publish placeholder until resolved')
         else:
             self.get_logger().error(
@@ -174,36 +180,7 @@ class ImuNode(Node):
             _build_imu_placeholder(self._ankle_r_frame, now))
 
 
-def _read_sdk_params_from_yaml() -> tuple[str, int]:
-    """Pre-parse sensors_params.yaml for SDK init before rclpy.init().
-
-    Returns (network_interface, domain_id).  Falls back to safe defaults
-    so SDK init never blocks on a missing file.
-    """
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        params_file = os.path.join(
-            get_package_share_directory('sensors'), 'config', 'sensors_params.yaml')
-        with open(params_file) as f:
-            doc = yaml.safe_load(f) or {}
-        p = doc.get('imu_node', {}).get('ros__parameters', {})
-        return str(p.get('network_interface', 'eth0')), int(p.get('domain_id', 0))
-    except Exception:
-        return 'eth0', 0
-
-
 def main(args=None) -> None:
-    # SDK init MUST precede rclpy.init() to avoid DDS domain conflicts.
-    if _SDK_AVAILABLE:
-        network_interface, domain_id = _read_sdk_params_from_yaml()
-        try:
-            ChannelFactory.Instance().Init(domain_id, network_interface)
-        except Exception as exc:
-            # Non-fatal: node will warn at runtime and publish placeholders.
-            import sys
-            print(f'[imu_node] WARNING: SDK ChannelFactory.Init failed: {exc}',
-                  file=sys.stderr)
-
     rclpy.init(args=args)
     node = ImuNode()
     try:
