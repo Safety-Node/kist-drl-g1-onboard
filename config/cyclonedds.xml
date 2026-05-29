@@ -20,7 +20,7 @@
         <Peer address="localhost"/>
       </Peers>
       <ParticipantIndex>auto</ParticipantIndex>
-      <MaxAutoParticipantIndex>200</MaxAutoParticipantIndex>
+      <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
     </Discovery>
     <Tracing>
       <Verbosity>warning</Verbosity>
@@ -50,7 +50,7 @@
         <Peer address="${DDS_PEER_IP}"/>
       </Peers>
       <ParticipantIndex>auto</ParticipantIndex>
-      <MaxAutoParticipantIndex>200</MaxAutoParticipantIndex>
+      <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
     </Discovery>
     <Internal>
       <Watermarks>
