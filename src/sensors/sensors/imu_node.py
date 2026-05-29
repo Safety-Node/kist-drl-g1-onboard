@@ -1,45 +1,155 @@
 """
 G1 IMU streaming — base + left/right ankle.
 
-Owns all IMU outputs as a single concern. 2026-05-23 refactor reverses the
-2026-05-15 fan-out decision (joint_state_node previously published base IMU
-as a side-effect of its lowstate subscription). Now:
-- joint_state_node owns JointState only.
-- imu_node owns the full IMU surface (base + ankles).
-Both nodes subscribe to G1 SDK lowstate independently; DDS multi-subscriber
-cost is negligible at the 100 Hz lowstate rate, and ownership becomes
-symmetric with the topic prefix (node name ↔ /onboard/sensors/imu/*).
+Owns all IMU outputs as a single concern. 2026-05-23 refactor: base IMU
+moved out of joint_state_node (which now owns JointState only). Both nodes
+subscribe to G1 SDK lowstate independently; DDS multi-subscriber cost is
+negligible at 100 Hz.
 
-Publications:
-- /onboard/sensors/imu/base         (sensor_msgs/Imu)  base IMU,
-                                                       frame_id = base_link
-- /onboard/sensors/imu/ankle_left   (sensor_msgs/Imu)  frame_id = ankle_left_link
-- /onboard/sensors/imu/ankle_right  (sensor_msgs/Imu)  frame_id = ankle_right_link
+Publications (all sensor_msgs/Imu, BestEffort QoS, ~100 Hz):
+  /onboard/sensors/imu/base         frame_id = base_link     — real data
+  /onboard/sensors/imu/ankle_left   frame_id = ankle_left_link  — placeholder
+  /onboard/sensors/imu/ankle_right  frame_id = ankle_right_link — placeholder
 
-Open question: G1 SDK ankle IMU exposure is unconfirmed. Base IMU rides on
-the existing lowstate channel; ankle IMUs may come from a separate SDK
-endpoint (TBD — KIST or SDK doc check). Until confirmed, ankle topics
-publish a placeholder so downstream wiring (comm_bridge relay + PC
-subscriber) can be exercised end-to-end.
+Ankle IMU source is unconfirmed (REQ-42 / TASK-38 open item). Placeholder
+publishes zero quaternion + zero vectors so that comm_bridge relay and PC
+subscribers can be exercised end-to-end. covariance[0] = -1 signals
+"measurement not available" per REP 145.
 
-TODO(REQ-42) [TASK-38]: declare params (publish_rate_hz + 3 frame_ids).
-TODO(REQ-42) [TASK-38]: base IMU from G1 SDK lowstate (own subscription).
-TODO(REQ-42) [TASK-38]: confirm G1 SDK ankle IMU source; swap placeholder for real read.
-TODO(REQ-42) [TASK-38]: paired timestamp if both ankles share a frame from the same SDK sample.
+SDK init ordering: ChannelFactory.Instance().Init() MUST be called after
+super().__init__() because rclpy.init() loads rmw_cyclonedds_cpp, which
+bootstraps the underlying DDS participant first.
 """
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+
+from builtin_interfaces.msg import Time
+from sensor_msgs.msg import Imu
+from std_msgs.msg import Header
+
+from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
+
+
+_BEST_EFFORT_QOS = QoSProfile(
+    reliability=ReliabilityPolicy.BEST_EFFORT,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1,
+)
+
+# REP 145: covariance[0] == -1  →  measurement not available.
+_PLACEHOLDER_COV = [-1.0] + [0.0] * 8
 
 
 class ImuNode(Node):
     def __init__(self) -> None:
         super().__init__('imu_node')
-        # TODO(REQ-42) [TASK-38]: wire 3 publishers + timer.
-        #   Base IMU: real (from G1 SDK lowstate, independent subscription
-        #             from joint_state_node).
-        #   Ankle L/R: placeholder publish until SDK source confirmed.
+
+        # Parameters
+        self.declare_parameter('publish_rate_hz', 100)
+        self.declare_parameter('imu_base_frame_id', 'base_link')
+        self.declare_parameter('imu_ankle_left_frame_id', 'ankle_left_link')
+        self.declare_parameter('imu_ankle_right_frame_id', 'ankle_right_link')
+        self.declare_parameter('network_interface', 'eth0')
+        self.declare_parameter('domain_id', 0)
+
+        rate_hz: int = self.get_parameter('publish_rate_hz').value
+        self._frame_base: str = self.get_parameter('imu_base_frame_id').value
+        self._frame_ankle_l: str = self.get_parameter('imu_ankle_left_frame_id').value
+        self._frame_ankle_r: str = self.get_parameter('imu_ankle_right_frame_id').value
+        network_iface: str = self.get_parameter('network_interface').value
+        domain_id: int = self.get_parameter('domain_id').value
+
+        # SDK init — must follow super().__init__() / rclpy.init()
+        ChannelFactory.Instance().Init(domain_id, network_iface)
+
+        # Publishers
+        self._pub_base = self.create_publisher(
+            Imu, '/onboard/sensors/imu/base', _BEST_EFFORT_QOS)
+        self._pub_ankle_l = self.create_publisher(
+            Imu, '/onboard/sensors/imu/ankle_left', _BEST_EFFORT_QOS)
+        self._pub_ankle_r = self.create_publisher(
+            Imu, '/onboard/sensors/imu/ankle_right', _BEST_EFFORT_QOS)
+
+        # Latest lowstate — written by SDK callback, read by timer
+        self._lowstate: LowState_ | None = None
+
+        # G1 SDK lowstate subscriber (independent from joint_state_node)
+        self._sub = ChannelSubscriber('rt/lf/lowstate', LowState_)
+        self._sub.Init(self._on_lowstate, 10)
+
+        # Publish timer
+        period = 1.0 / rate_hz
+        self._timer = self.create_timer(period, self._publish)
+
         self.get_logger().info(
-            'imu_node started (TBD — publishes base + ankle_left/right Imu)')
+            f'imu_node ready — {rate_hz} Hz, iface={network_iface}, domain={domain_id}')
+
+    # ------------------------------------------------------------------ #
+    # SDK callback                                                         #
+    # ------------------------------------------------------------------ #
+
+    def _on_lowstate(self, msg: LowState_) -> None:
+        self._lowstate = msg
+
+    # ------------------------------------------------------------------ #
+    # Timer callback                                                       #
+    # ------------------------------------------------------------------ #
+
+    def _publish(self) -> None:
+        stamp = self.get_clock().now().to_msg()
+        self._publish_base(stamp)
+        self._publish_ankle_placeholder(stamp, self._pub_ankle_l, self._frame_ankle_l)
+        self._publish_ankle_placeholder(stamp, self._pub_ankle_r, self._frame_ankle_r)
+
+    def _publish_base(self, stamp: Time) -> None:
+        msg = Imu()
+        msg.header = Header(stamp=stamp, frame_id=self._frame_base)
+
+        if self._lowstate is None:
+            # No SDK data yet — emit placeholder so topic is visible
+            msg.orientation_covariance = list(_PLACEHOLDER_COV)
+            msg.angular_velocity_covariance = list(_PLACEHOLDER_COV)
+            msg.linear_acceleration_covariance = list(_PLACEHOLDER_COV)
+            self._pub_base.publish(msg)
+            return
+
+        imu = self._lowstate.imu_state
+
+        # G1 SDK quaternion order: [w, x, y, z]
+        msg.orientation.w = float(imu.quaternion[0])
+        msg.orientation.x = float(imu.quaternion[1])
+        msg.orientation.y = float(imu.quaternion[2])
+        msg.orientation.z = float(imu.quaternion[3])
+        msg.orientation_covariance = [0.0] * 9
+
+        msg.angular_velocity.x = float(imu.gyroscope[0])
+        msg.angular_velocity.y = float(imu.gyroscope[1])
+        msg.angular_velocity.z = float(imu.gyroscope[2])
+        msg.angular_velocity_covariance = [0.0] * 9
+
+        msg.linear_acceleration.x = float(imu.accelerometer[0])
+        msg.linear_acceleration.y = float(imu.accelerometer[1])
+        msg.linear_acceleration.z = float(imu.accelerometer[2])
+        msg.linear_acceleration_covariance = [0.0] * 9
+
+        self._pub_base.publish(msg)
+
+    def _publish_ankle_placeholder(
+        self,
+        stamp: Time,
+        pub,
+        frame_id: str,
+    ) -> None:
+        # TODO(REQ-42) [TASK-38]: replace with real ankle IMU once SDK source confirmed.
+        msg = Imu()
+        msg.header = Header(stamp=stamp, frame_id=frame_id)
+        msg.orientation.w = 1.0  # identity quaternion
+        msg.orientation_covariance = list(_PLACEHOLDER_COV)
+        msg.angular_velocity_covariance = list(_PLACEHOLDER_COV)
+        msg.linear_acceleration_covariance = list(_PLACEHOLDER_COV)
+        pub.publish(msg)
 
 
 def main(args=None) -> None:
