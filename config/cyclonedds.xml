@@ -2,26 +2,48 @@
 <CycloneDDS xmlns="https://cdds.io/config"
             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
-  <Domain Id="any">
+
+  <!--
+    Domain 0: NX-internal only.
+    All /onboard/* nodes (sensors, motor_controller, safety_monitor) run here.
+    Loopback interface only — domain-0 traffic never leaves the container.
+  -->
+  <Domain Id="0">
     <General>
-      <!--
-        eth0: NX↔PC data plane.
-        lo:   required for NetworkPartition address="127.0.0.1" to bind.
-              multicast disabled on lo so it never becomes the primary interface.
-      -->
       <Interfaces>
-        <NetworkInterface name="eth0" priority="default" multicast="true"/>
+        <NetworkInterface name="lo" priority="default" multicast="false"/>
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <Peers>
+        <Peer address="localhost"/>
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>200</MaxAutoParticipantIndex>
+    </Discovery>
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+
+  <!--
+    Domain 1: Bridge domain shared with the workstation PC.
+    outbound_relay and inbound_relay publish/subscribe here to exchange
+    /bridge/* topics with the PC. eth0 + loopback so relay nodes on the
+    same host can also discover each other.
+    DDS_PEER_IP must be set to the workstation IP before launch.
+  -->
+  <Domain Id="1">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="eth0" priority="default" multicast="false"/>
         <NetworkInterface name="lo"   priority="default" multicast="false"/>
       </Interfaces>
-      <!--
-        Unicast-only peer discovery: explicitly list the PC as a peer so
-        loopback partition and eth0 discovery can coexist without multicast
-        conflicts. DDS_PEER_IP must be set to the workstation IP before launch.
-      -->
       <AllowMulticast>false</AllowMulticast>
       <MaxMessageSize>65500B</MaxMessageSize>
     </General>
-
     <Discovery>
       <Peers>
         <Peer address="localhost"/>
@@ -30,30 +52,15 @@
       <ParticipantIndex>auto</ParticipantIndex>
       <MaxAutoParticipantIndex>200</MaxAutoParticipantIndex>
     </Discovery>
-
-    <!--
-      Keep /onboard/* topics off the LAN by binding them to the loopback
-      partition. outbound_relay (same host) still subscribes via 127.0.0.1;
-      the PC never sees /onboard/* traffic.
-    -->
-    <Partitioning>
-      <NetworkPartitions>
-        <NetworkPartition name="OnboardLocal" address="127.0.0.1"/>
-      </NetworkPartitions>
-      <PartitionMappings>
-        <PartitionMapping DCPSPartitionTopic="*.rt/onboard/*" NetworkPartition="OnboardLocal"/>
-      </PartitionMappings>
-    </Partitioning>
-
     <Internal>
       <Watermarks>
         <WhcHigh>2MB</WhcHigh>
       </Watermarks>
     </Internal>
-
     <Tracing>
       <Verbosity>warning</Verbosity>
       <OutputFile>stderr</OutputFile>
     </Tracing>
   </Domain>
+
 </CycloneDDS>
