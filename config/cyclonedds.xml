@@ -4,29 +4,6 @@
             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
 
   <!--
-    Domain 0: NX-internal ROS 2 nodes + G1 SDK (imu_node).
-    eth0 multicast allows imu_node's SDK participant to discover the robot
-    (192.168.123.161) via standard DDS multicast — no unicast peer probing,
-    no EAGAIN storm. lo ensures intra-host nodes discover each other.
-  -->
-  <Domain Id="0">
-    <General>
-      <Interfaces>
-        <NetworkInterface name="lo"   multicast="false"/>
-        <NetworkInterface name="eth0" multicast="true"/>
-      </Interfaces>
-    </General>
-    <Discovery>
-      <ParticipantIndex>auto</ParticipantIndex>
-      <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
-    </Discovery>
-    <Tracing>
-      <Verbosity>warning</Verbosity>
-      <OutputFile>stderr</OutputFile>
-    </Tracing>
-  </Domain>
-
-  <!--
     Domain 1: Bridge domain shared with the workstation PC.
     outbound_relay and inbound_relay publish/subscribe here to exchange
     /bridge/* topics with the PC. eth0 + loopback so relay nodes on the
