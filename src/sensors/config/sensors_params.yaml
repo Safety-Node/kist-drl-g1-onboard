@@ -36,10 +36,10 @@ imu_node:
     imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
-    # TBD: real ankle IMU source. lowstate is consumed by both joint_state_node
-    # and this node (DDS multi-subscriber, negligible cost); check whether G1
-    # SDK exposes ankle IMU on a separate channel or if it must be derived
-    # (e.g. via FK from joint encoders + base IMU).
+    network_interface: "eth0"   # NX↔G1 LAN interface (same as joint_state_node)
+    domain_id: 0                # G1 SDK DDS domain (isolated from ROS 2 bridge domain)
+    # Ankle IMU source TBD (REQ-42). Placeholder published until KIST/SDK confirms
+    # whether G1 exposes ankle IMU natively or requires FK derivation.
 
 # [TASK-32] RealSense D435i — read by sensors.launch.py and passed as launch_arguments.
 camera_node:
