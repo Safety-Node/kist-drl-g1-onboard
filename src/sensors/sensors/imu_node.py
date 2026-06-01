@@ -18,13 +18,17 @@ subscribers can be exercised end-to-end. covariance[0] = -1 signals
 
 SDK / ROS 2 CycloneDDS coexistence
 -----------------------------------
-unitree_sdk2py uses its own CycloneDDS instance (separate libddsc.so from
-/usr/local/lib) independent of rmw_cyclonedds_cpp (/opt/ros/humble/lib).
-The two domains are isolated — no conflict, no monkey-patch needed.
+unitree_sdk2py and rmw_cyclonedds_cpp share the same libddsc.so, so only
+one process can own domain 0.  _patch_channel_factory() replaces
+ChannelFactory.Init() with a version that skips Domain() creation and
+creates a DomainParticipant directly on the already-active domain.
 
-CYCLONEDDS_URI (set by run_onboard.sh to a lo-only config) must be unset
-before ChannelFactory.Init() so the SDK uses CycloneDDS defaults
-(all interfaces + multicast), allowing it to discover the robot over eth0.
+main() overrides CYCLONEDDS_URI with eth0 + multicast BEFORE rclpy.init()
+so that domain 0 is created with the correct network config.  Without this,
+run_onboard.sh sets a lo-only URI which would prevent the SDK from receiving
+robot DDS data on eth0.  Other nodes (mic, speaker, …) run in separate
+processes with their own lo-only domain 0 and communicate with imu_node via
+loopback discovery.
 """
 import rclpy
 from rclpy.node import Node
@@ -34,8 +38,39 @@ from builtin_interfaces.msg import Time
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Header
 
+import unitree_sdk2py.core.channel as _sdk_ch
 from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+
+def _patch_channel_factory() -> None:
+    """Replace ChannelFactory.Init to skip Domain() creation.
+
+    rmw_cyclonedds_cpp and unitree_sdk2py share libddsc.so.  Calling
+    Domain(0, config) after rclpy.init() raises DDSException because
+    domain 0 already exists.  We skip straight to DomainParticipant(),
+    which joins the already-active domain.
+    """
+    from cyclonedds.domain import DomainParticipant as _DDP
+
+    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
+        if self.__class__._ChannelFactory__initialized:
+            return True
+        with self.__class__._ChannelFactory__init_lock:
+            if self.__class__._ChannelFactory__initialized:
+                return True
+            try:
+                self.__class__._ChannelFactory__participant = _DDP(id)
+            except Exception:
+                return False
+            self.__class__._ChannelFactory__qos = qos
+            self.__class__._ChannelFactory__initialized = True
+            return True
+
+    _sdk_ch.ChannelFactory.Init = _init
+
+
+_patch_channel_factory()
 
 
 _BEST_EFFORT_QOS = QoSProfile(
@@ -66,6 +101,9 @@ class ImuNode(Node):
         self._frame_ankle_r: str = self.get_parameter('imu_ankle_right_frame_id').value
         network_iface: str = self.get_parameter('network_interface').value
         domain_id: int = self.get_parameter('domain_id').value
+
+        # SDK init — joins the domain already created by rclpy.init()
+        ChannelFactory().Init(domain_id, network_iface)
 
         # Publishers
         self._pub_base = self.create_publisher(
@@ -158,14 +196,22 @@ class ImuNode(Node):
 def main(args=None) -> None:
     import os
 
-    # Unset CYCLONEDDS_URI so unitree_sdk2py uses CycloneDDS defaults
-    # (all interfaces + multicast), allowing robot discovery over eth0.
-    # run_onboard.sh sets it to a lo-only config which blocks robot data.
-    os.environ.pop('CYCLONEDDS_URI', None)
-
+    # Override CYCLONEDDS_URI so domain 0 is created with eth0+multicast.
+    # run_onboard.sh sets a lo-only URI; without this override the SDK
+    # participant (monkey-patched to join domain 0) can't see robot data.
     iface = os.getenv('G1_NETWORK_IFACE', 'eth0')
-    domain_id = int(os.getenv('G1_DOMAIN_ID', '0'))
-    ChannelFactory().Init(domain_id, iface)
+    os.environ['CYCLONEDDS_URI'] = (
+        '<CycloneDDS xmlns="https://cdds.io/config">'
+        '  <Domain Id="0">'
+        '    <General>'
+        '      <Interfaces>'
+        f'        <NetworkInterface name="lo"     multicast="false"/>'
+        f'        <NetworkInterface name="{iface}" multicast="true"/>'
+        '      </Interfaces>'
+        '    </General>'
+        '  </Domain>'
+        '</CycloneDDS>'
+    )
 
     rclpy.init(args=args)
     node = ImuNode()
