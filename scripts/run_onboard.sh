@@ -21,7 +21,9 @@ set -u
 # Apply CycloneDDS config (partition filtering for /onboard/* topics).
 export CYCLONEDDS_URI="file://${REPO_ROOT}/config/cyclonedds.xml"
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+# Workstation IP for unicast peer discovery on the bridge domain (domain 1).
+export DDS_PEER_IP=${DDS_PEER_IP:-192.168.123.222}
 
 declare -a PIDS=()
 
