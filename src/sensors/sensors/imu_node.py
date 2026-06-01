@@ -62,7 +62,7 @@ class ImuNode(Node):
         domain_id: int = self.get_parameter('domain_id').value
 
         # SDK init — must follow super().__init__() / rclpy.init()
-        ChannelFactory.Init(domain_id, network_iface)
+        ChannelFactory().Init(domain_id, network_iface)
 
         # Publishers
         self._pub_base = self.create_publisher(
