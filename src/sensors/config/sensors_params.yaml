@@ -17,19 +17,11 @@ speaker_node:
     channels: 1                   # mono
     max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
-# [TASK-37] G1 SDK lowstate → JointState publisher.
-# 2026-05-23 refactor: base IMU moved out (now in imu_node). This node only
-# owns /onboard/sensors/joint_states.
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
     network_interface: "eno2"     # TBD: confirm NX↔G1 LAN interface
     domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
-    # 인덱스는 LowState_.motor_state[i]와 1:1 매핑. safety_monitor의 joint_limits 키와
-    # 정확히 같아야 함 (불일치 시 EstopFlag.REASON_MALFORMED_CMD).
-    # 변형별 비활성 관절:
-    #   29-DoF (waist locked): 13(waist_roll), 14(waist_pitch) — 명목상 존재, 잠금
-    #   23-DoF: 13, 14, 20, 21, 27, 28 모두 잠금
     joint_names:
       # Left leg (0-5)
       - left_hip_pitch        # 0

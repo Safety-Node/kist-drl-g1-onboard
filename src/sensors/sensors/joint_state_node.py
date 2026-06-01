@@ -22,6 +22,7 @@ from typing import List, Optional, Sequence
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import JointState
 
 from unitree_sdk2py.core.channel import (
@@ -29,6 +30,15 @@ from unitree_sdk2py.core.channel import (
     ChannelSubscriber,
 )
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+
+# Sensor-stream QoS — matches imu_node and the comm_bridge outbound relay
+# subscriber (sensor → best_effort, freshness wins; see comm_bridge_params.yaml).
+_BEST_EFFORT_QOS = QoSProfile(
+    reliability=ReliabilityPolicy.BEST_EFFORT,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1,
+)
 
 
 def to_joint_state(lowstate, joint_names: Sequence[str], stamp) -> JointState:
@@ -71,7 +81,7 @@ class JointStateNode(Node):
         self._sub.Init(self._on_lowstate, 10)
 
         self._joint_pub = self.create_publisher(
-            JointState, '/onboard/sensors/joint_states', 10)
+            JointState, '/onboard/sensors/joint_states', _BEST_EFFORT_QOS)
 
         period = 1.0 / rate if rate > 0 else 0.01
         self._timer = self.create_timer(period, self._tick)
