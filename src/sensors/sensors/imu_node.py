@@ -18,20 +18,13 @@ subscribers can be exercised end-to-end. covariance[0] = -1 signals
 
 SDK / ROS 2 CycloneDDS coexistence
 -----------------------------------
-rmw_cyclonedds_cpp creates CycloneDDS domain 0 when rclpy.init() is called.
-ChannelFactory().Init() also calls Domain(id, config) which fails with
-DDSException if the domain already exists.  _patch_channel_factory() below
-replaces Init() with a version that skips the explicit Domain() creation and
-instead creates a DomainParticipant directly on the already-active domain.
+unitree_sdk2py uses its own CycloneDDS instance (separate libddsc.so from
+/usr/local/lib) independent of rmw_cyclonedds_cpp (/opt/ros/humble/lib).
+The two domains are isolated — no conflict, no monkey-patch needed.
 
-imu_node is the ONLY node that needs eth0 + robot peer to reach the G1 SDK.
-Adding the robot IP as a unicast peer in the shared cyclonedds.xml would cause
-all domain 0 nodes to probe robot ports 7410-7448 simultaneously → EAGAIN storm.
-Instead, main() overrides CYCLONEDDS_URI in-process with an imu_node-specific
-XML (lo + eth0 + robot peer, MaxAutoParticipantIndex=5) before rclpy.init().
-This affects only this process; all other sensor nodes use cyclonedds.xml Domain 0
-(lo-only, no robot peer).  G1_ROBOT_IP and G1_NETWORK_IFACE env vars override
-the defaults (192.168.123.161 / eth0).  (TASK-32 tracks proper SDK/ROS 2 isolation.)
+CYCLONEDDS_URI (set by run_onboard.sh to a lo-only config) must be unset
+before ChannelFactory.Init() so the SDK uses CycloneDDS defaults
+(all interfaces + multicast), allowing it to discover the robot over eth0.
 """
 import rclpy
 from rclpy.node import Node
@@ -41,38 +34,8 @@ from builtin_interfaces.msg import Time
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Header
 
-import unitree_sdk2py.core.channel as _sdk_ch
 from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
-from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
-
-
-def _patch_channel_factory() -> None:
-    """Replace ChannelFactory.Init to skip Domain() creation.
-
-    CycloneDDS rejects dds_create_domain() when the domain already exists
-    (rmw_cyclonedds_cpp owns it).  We skip straight to DomainParticipant(),
-    which succeeds on any already-live domain.
-    """
-    from cyclonedds.domain import DomainParticipant as _DDP
-
-    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
-        if self.__class__._ChannelFactory__initialized:
-            return True
-        with self.__class__._ChannelFactory__init_lock:
-            if self.__class__._ChannelFactory__initialized:
-                return True
-            try:
-                self.__class__._ChannelFactory__participant = _DDP(id)
-            except Exception:
-                return False
-            self.__class__._ChannelFactory__qos = qos
-            self.__class__._ChannelFactory__initialized = True
-            return True
-
-    _sdk_ch.ChannelFactory.Init = _init
-
-
-_patch_channel_factory()
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
 
 _BEST_EFFORT_QOS = QoSProfile(
@@ -104,9 +67,6 @@ class ImuNode(Node):
         network_iface: str = self.get_parameter('network_interface').value
         domain_id: int = self.get_parameter('domain_id').value
 
-        # SDK init — must follow super().__init__() / rclpy.init()
-        ChannelFactory().Init(domain_id, network_iface)
-
         # Publishers
         self._pub_base = self.create_publisher(
             Imu, '/onboard/sensors/imu/base', _BEST_EFFORT_QOS)
@@ -119,7 +79,7 @@ class ImuNode(Node):
         self._lowstate: LowState_ | None = None
 
         # G1 SDK lowstate subscriber (independent from joint_state_node)
-        self._sub = ChannelSubscriber('rt/lf/lowstate', LowState_)
+        self._sub = ChannelSubscriber('rt/lowstate', LowState_)
         self._sub.Init(self._on_lowstate, 10)
 
         # Publish timer
@@ -197,35 +157,15 @@ class ImuNode(Node):
 
 def main(args=None) -> None:
     import os
-    import textwrap
 
-    # Override CYCLONEDDS_URI for this process only so the G1 SDK participant
-    # (domain 0) can discover the robot over eth0 via unicast.  MaxAutoParticipant
-    # Index=20 matches cyclonedds.xml so imu_node can always find a free participant
-    # index even when 8+ other domain 0 processes are already running.  Robot probe
-    # traffic (21 ports × 1 process) is negligible — no EAGAIN storm risk.
-    robot_ip = os.getenv('G1_ROBOT_IP', '192.168.123.161')
-    iface    = os.getenv('G1_NETWORK_IFACE', 'eth0')
-    os.environ['CYCLONEDDS_URI'] = textwrap.dedent(f"""\
-        <CycloneDDS xmlns="https://cdds.io/config">
-          <Domain Id="0">
-            <General>
-              <Interfaces>
-                <NetworkInterface name="lo"      multicast="false"/>
-                <NetworkInterface name="{iface}" multicast="false"/>
-              </Interfaces>
-              <AllowMulticast>false</AllowMulticast>
-            </General>
-            <Discovery>
-              <Peers>
-                <Peer address="localhost"/>
-                <Peer address="{robot_ip}"/>
-              </Peers>
-              <ParticipantIndex>auto</ParticipantIndex>
-              <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
-            </Discovery>
-          </Domain>
-        </CycloneDDS>""")
+    # Unset CYCLONEDDS_URI so unitree_sdk2py uses CycloneDDS defaults
+    # (all interfaces + multicast), allowing robot discovery over eth0.
+    # run_onboard.sh sets it to a lo-only config which blocks robot data.
+    os.environ.pop('CYCLONEDDS_URI', None)
+
+    iface = os.getenv('G1_NETWORK_IFACE', 'eth0')
+    domain_id = int(os.getenv('G1_DOMAIN_ID', '0'))
+    ChannelFactory().Init(domain_id, iface)
 
     rclpy.init(args=args)
     node = ImuNode()
