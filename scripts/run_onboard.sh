@@ -10,12 +10,6 @@ ROS_DISTRO=${ROS_DISTRO:-humble}
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Ensure the veth/eth0 device queue is large enough to absorb DDS discovery
-# probe bursts (21 UDP packets at once). Docker veth defaults to txqueuelen=0
-# (noqueue), which causes EAGAIN on non-blocking UDP sends and prevents G1 SDK
-# from ever discovering the robot. This requires root; ignore failure silently.
-ip link set eth0 txqueuelen 1000 2>/dev/null || true
-
 # shellcheck disable=SC1090
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 # shellcheck disable=SC1091
