@@ -18,17 +18,13 @@ subscribers can be exercised end-to-end. covariance[0] = -1 signals
 
 SDK / ROS 2 CycloneDDS coexistence
 -----------------------------------
-unitree_sdk2py and rmw_cyclonedds_cpp share the same libddsc.so, so only
-one process can own domain 0.  _patch_channel_factory() replaces
+unitree_sdk2py and rmw_cyclonedds_cpp share libddsc.so, so only one
+process can own domain 0.  _patch_channel_factory() replaces
 ChannelFactory.Init() with a version that skips Domain() creation and
 creates a DomainParticipant directly on the already-active domain.
 
-main() overrides CYCLONEDDS_URI with eth0 + multicast BEFORE rclpy.init()
-so that domain 0 is created with the correct network config.  Without this,
-run_onboard.sh sets a lo-only URI which would prevent the SDK from receiving
-robot DDS data on eth0.  Other nodes (mic, speaker, …) run in separate
-processes with their own lo-only domain 0 and communicate with imu_node via
-loopback discovery.
+config/cyclonedds.xml Domain 0 uses eth0+multicast so the SDK participant
+can discover the robot via standard multicast discovery.
 """
 import rclpy
 from rclpy.node import Node
@@ -194,25 +190,6 @@ class ImuNode(Node):
 
 
 def main(args=None) -> None:
-    import os
-
-    # Override CYCLONEDDS_URI so domain 0 is created with eth0+multicast.
-    # run_onboard.sh sets a lo-only URI; without this override the SDK
-    # participant (monkey-patched to join domain 0) can't see robot data.
-    iface = os.getenv('G1_NETWORK_IFACE', 'eth0')
-    os.environ['CYCLONEDDS_URI'] = (
-        '<CycloneDDS xmlns="https://cdds.io/config">'
-        '  <Domain Id="0">'
-        '    <General>'
-        '      <Interfaces>'
-        f'        <NetworkInterface name="lo"     multicast="false"/>'
-        f'        <NetworkInterface name="{iface}" multicast="true"/>'
-        '      </Interfaces>'
-        '    </General>'
-        '  </Domain>'
-        '</CycloneDDS>'
-    )
-
     rclpy.init(args=args)
     node = ImuNode()
     try:

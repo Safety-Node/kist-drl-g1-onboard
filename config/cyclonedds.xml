@@ -4,24 +4,19 @@
             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
 
   <!--
-    Domain 0: NX-internal ROS 2 nodes (loopback only).
-    imu_node is the only node that needs eth0 + robot peer for G1 SDK access;
-    it overrides CYCLONEDDS_URI in-process (see imu_node.py main()) so only its
-    own DDS domain picks up the robot peer. All other domain 0 nodes stay on lo
-    to avoid the EAGAIN discovery-probe storm that unicast robot peers cause.
-    Raw Unitree DDS topics potentially leaking via imu_node are tracked in TASK-32.
+    Domain 0: NX-internal ROS 2 nodes + G1 SDK (imu_node).
+    eth0 multicast allows imu_node's SDK participant to discover the robot
+    (192.168.123.161) via standard DDS multicast — no unicast peer probing,
+    no EAGAIN storm. lo ensures intra-host nodes discover each other.
   -->
   <Domain Id="0">
     <General>
       <Interfaces>
-        <NetworkInterface name="lo" multicast="false"/>
+        <NetworkInterface name="lo"   multicast="false"/>
+        <NetworkInterface name="eth0" multicast="true"/>
       </Interfaces>
-      <AllowMulticast>false</AllowMulticast>
     </General>
     <Discovery>
-      <Peers>
-        <Peer address="localhost"/>
-      </Peers>
       <ParticipantIndex>auto</ParticipantIndex>
       <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
     </Discovery>
