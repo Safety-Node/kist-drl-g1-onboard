@@ -20,7 +20,7 @@ speaker_node:
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
-    network_interface: "eno2"     # TBD: confirm NX↔G1 LAN interface
+    network_interface: "eno2"     # NX↔G1 LAN interface (confirmed)
     domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
     joint_names:
       # Left leg (0-5)
@@ -68,7 +68,7 @@ imu_node:
     imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
-    network_interface: "eth0"   # NX↔G1 LAN interface (same as joint_state_node)
+    network_interface: "eno2"   # NX↔G1 LAN interface (same as joint_state_node, confirmed)
     domain_id: 0                # G1 SDK DDS domain (isolated from ROS 2 bridge domain)
     # Ankle IMU source TBD (REQ-42). Placeholder published until KIST/SDK confirms
     # whether G1 exposes ankle IMU natively or requires FK derivation.
