@@ -23,10 +23,15 @@ ChannelFactory().Init() also calls Domain(id, config) which fails with
 DDSException if the domain already exists.  _patch_channel_factory() below
 replaces Init() with a version that skips the explicit Domain() creation and
 instead creates a DomainParticipant directly on the already-active domain.
-The active domain config (interfaces, peers) is inherited from whatever
-CYCLONEDDS_URI / cyclonedds.xml was in effect at rclpy.init() time — see
-cyclonedds.xml Domain 0 which must include eth0 for the SDK to reach the robot.
-(TASK-32 tracks proper SDK/ROS 2 DDS isolation.)
+
+imu_node is the ONLY node that needs eth0 + robot peer to reach the G1 SDK.
+Adding the robot IP as a unicast peer in the shared cyclonedds.xml would cause
+all domain 0 nodes to probe robot ports 7410-7448 simultaneously → EAGAIN storm.
+Instead, main() overrides CYCLONEDDS_URI in-process with an imu_node-specific
+XML (lo + eth0 + robot peer, MaxAutoParticipantIndex=5) before rclpy.init().
+This affects only this process; all other sensor nodes use cyclonedds.xml Domain 0
+(lo-only, no robot peer).  G1_ROBOT_IP and G1_NETWORK_IFACE env vars override
+the defaults (192.168.123.161 / eth0).  (TASK-32 tracks proper SDK/ROS 2 isolation.)
 """
 import rclpy
 from rclpy.node import Node
@@ -191,6 +196,36 @@ class ImuNode(Node):
 
 
 def main(args=None) -> None:
+    import os
+    import textwrap
+
+    # Override CYCLONEDDS_URI for this process only so the G1 SDK participant
+    # (domain 0) can discover the robot over eth0 via unicast.  MaxAutoParticipant
+    # Index=5 limits probes to 6 ports (7410-7420), avoiding the EAGAIN storm that
+    # the global cyclonedds.xml robot peer caused on all domain 0 nodes.
+    robot_ip = os.getenv('G1_ROBOT_IP', '192.168.123.161')
+    iface    = os.getenv('G1_NETWORK_IFACE', 'eth0')
+    os.environ['CYCLONEDDS_URI'] = textwrap.dedent(f"""\
+        <CycloneDDS xmlns="https://cdds.io/config">
+          <Domain Id="0">
+            <General>
+              <Interfaces>
+                <NetworkInterface name="lo"      multicast="false"/>
+                <NetworkInterface name="{iface}" multicast="false"/>
+              </Interfaces>
+              <AllowMulticast>false</AllowMulticast>
+            </General>
+            <Discovery>
+              <Peers>
+                <Peer address="localhost"/>
+                <Peer address="{robot_ip}"/>
+              </Peers>
+              <ParticipantIndex>auto</ParticipantIndex>
+              <MaxAutoParticipantIndex>5</MaxAutoParticipantIndex>
+            </Discovery>
+          </Domain>
+        </CycloneDDS>""")
+
     rclpy.init(args=args)
     node = ImuNode()
     try:
