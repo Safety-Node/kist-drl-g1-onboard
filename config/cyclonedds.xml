@@ -4,20 +4,24 @@
             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
 
   <!--
-    Domain 0: NX-internal only.
+    Domain 0: NX-internal + G1 SDK.
     All /onboard/* nodes (sensors, motor_controller, safety_monitor) run here.
-    Loopback interface only — domain-0 traffic never leaves the container.
+    eth0 is included so the G1 SDK participant (unitree_sdk2py) can reach the
+    robot over the 192.168.123.x LAN.  Raw Unitree DDS topics (rt/lf/lowstate
+    etc.) will appear in `ros2 topic list`; that leak is tracked in TASK-32.
   -->
   <Domain Id="0">
     <General>
       <Interfaces>
-        <NetworkInterface name="lo" priority="default" multicast="false"/>
+        <NetworkInterface name="lo"   priority="default" multicast="false"/>
+        <NetworkInterface name="eth0" priority="default" multicast="false"/>
       </Interfaces>
       <AllowMulticast>false</AllowMulticast>
     </General>
     <Discovery>
       <Peers>
         <Peer address="localhost"/>
+        <Peer address="192.168.123.161"/>
       </Peers>
       <ParticipantIndex>auto</ParticipantIndex>
       <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>

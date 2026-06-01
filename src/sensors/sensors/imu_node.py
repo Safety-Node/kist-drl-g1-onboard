@@ -16,9 +16,17 @@ publishes zero quaternion + zero vectors so that comm_bridge relay and PC
 subscribers can be exercised end-to-end. covariance[0] = -1 signals
 "measurement not available" per REP 145.
 
-SDK init ordering: ChannelFactory.Instance().Init() MUST be called after
-super().__init__() because rclpy.init() loads rmw_cyclonedds_cpp, which
-bootstraps the underlying DDS participant first.
+SDK / ROS 2 CycloneDDS coexistence
+-----------------------------------
+rmw_cyclonedds_cpp creates CycloneDDS domain 0 when rclpy.init() is called.
+ChannelFactory().Init() also calls Domain(id, config) which fails with
+DDSException if the domain already exists.  _patch_channel_factory() below
+replaces Init() with a version that skips the explicit Domain() creation and
+instead creates a DomainParticipant directly on the already-active domain.
+The active domain config (interfaces, peers) is inherited from whatever
+CYCLONEDDS_URI / cyclonedds.xml was in effect at rclpy.init() time — see
+cyclonedds.xml Domain 0 which must include eth0 for the SDK to reach the robot.
+(TASK-32 tracks proper SDK/ROS 2 DDS isolation.)
 """
 import rclpy
 from rclpy.node import Node
@@ -28,8 +36,38 @@ from builtin_interfaces.msg import Time
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Header
 
+import unitree_sdk2py.core.channel as _sdk_ch
 from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
+
+
+def _patch_channel_factory() -> None:
+    """Replace ChannelFactory.Init to skip Domain() creation.
+
+    CycloneDDS rejects dds_create_domain() when the domain already exists
+    (rmw_cyclonedds_cpp owns it).  We skip straight to DomainParticipant(),
+    which succeeds on any already-live domain.
+    """
+    from cyclonedds.domain import DomainParticipant as _DDP
+
+    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
+        if self.__class__._ChannelFactory__initialized:
+            return True
+        with self.__class__._ChannelFactory__init_lock:
+            if self.__class__._ChannelFactory__initialized:
+                return True
+            try:
+                self.__class__._ChannelFactory__participant = _DDP(id)
+            except Exception:
+                return False
+            self.__class__._ChannelFactory__qos = qos
+            self.__class__._ChannelFactory__initialized = True
+            return True
+
+    _sdk_ch.ChannelFactory.Init = _init
+
+
+_patch_channel_factory()
 
 
 _BEST_EFFORT_QOS = QoSProfile(
