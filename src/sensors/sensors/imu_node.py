@@ -201,8 +201,9 @@ def main(args=None) -> None:
 
     # Override CYCLONEDDS_URI for this process only so the G1 SDK participant
     # (domain 0) can discover the robot over eth0 via unicast.  MaxAutoParticipant
-    # Index=5 limits probes to 6 ports (7410-7420), avoiding the EAGAIN storm that
-    # the global cyclonedds.xml robot peer caused on all domain 0 nodes.
+    # Index=20 matches cyclonedds.xml so imu_node can always find a free participant
+    # index even when 8+ other domain 0 processes are already running.  Robot probe
+    # traffic (21 ports × 1 process) is negligible — no EAGAIN storm risk.
     robot_ip = os.getenv('G1_ROBOT_IP', '192.168.123.161')
     iface    = os.getenv('G1_NETWORK_IFACE', 'eth0')
     os.environ['CYCLONEDDS_URI'] = textwrap.dedent(f"""\
@@ -221,7 +222,7 @@ def main(args=None) -> None:
                 <Peer address="{robot_ip}"/>
               </Peers>
               <ParticipantIndex>auto</ParticipantIndex>
-              <MaxAutoParticipantIndex>5</MaxAutoParticipantIndex>
+              <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
             </Discovery>
           </Domain>
         </CycloneDDS>""")
