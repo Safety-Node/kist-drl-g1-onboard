@@ -5,23 +5,25 @@
 
   <!--
     Domain 0: NX-internal + G1 SDK.
-    All /onboard/* nodes (sensors, motor_controller, safety_monitor) run here.
-    eth0 is included so the G1 SDK participant (unitree_sdk2py) can reach the
-    robot over the 192.168.123.x LAN.  Raw Unitree DDS topics (rt/lf/lowstate
-    etc.) will appear in `ros2 topic list`; that leak is tracked in TASK-32.
+    eth0 is included so the G1 SDK participant (unitree_sdk2py / monkey-patched
+    DomainParticipant) can reach the robot via multicast on the 192.168.123.x LAN.
+    lo is preferred (priority 2) for intra-NX ROS 2 data traffic.
+    eth0 multicast is used for SDK <-> robot DDS discovery (no unicast peer needed;
+    adding the robot IP as a unicast peer causes an EAGAIN probe storm because the
+    robot does not respond to standard CycloneDDS SPDP on ports 7410-7448).
+    Raw Unitree DDS topics leaking into `ros2 topic list` are tracked in TASK-32.
   -->
   <Domain Id="0">
     <General>
       <Interfaces>
-        <NetworkInterface name="lo"   priority="default" multicast="false"/>
-        <NetworkInterface name="eth0" priority="default" multicast="false"/>
+        <NetworkInterface name="lo"   priority="2" multicast="false"/>
+        <NetworkInterface name="eth0" priority="1" multicast="true"/>
       </Interfaces>
-      <AllowMulticast>false</AllowMulticast>
+      <AllowMulticast>true</AllowMulticast>
     </General>
     <Discovery>
       <Peers>
         <Peer address="localhost"/>
-        <Peer address="192.168.123.161"/>
       </Peers>
       <ParticipantIndex>auto</ParticipantIndex>
       <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
