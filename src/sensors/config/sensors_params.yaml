@@ -61,7 +61,6 @@ uwb_node:
     serial_baud: 115200
     udp_listen_port: 50000        # reserved (transport=="udp", not yet implemented)
     publish_rate_hz: 20.0
-    max_speed_mps: 3.0            # outlier gate: drop steps > max_speed/rate metres
 
     # Frame conventions
     frame_id: "map"

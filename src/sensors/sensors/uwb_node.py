@@ -23,9 +23,6 @@ Publish policy
 - Publishes **only** when a valid fix is available (quality > 0).
 - No placeholder publish — fake zero-pose can cause false task-success
   detection downstream.
-- Outlier rejection: drop samples whose step distance exceeds
-  ``max_speed_mps / publish_rate_hz`` metres (parametrised).
-
 Topics
 ------
   /onboard/sensors/uwb/pose  geometry_msgs/PoseStamped  BestEffort  ~20 Hz
@@ -34,7 +31,6 @@ Topics
 from __future__ import annotations
 
 import abc
-import math
 import threading
 import time
 from dataclasses import dataclass
@@ -298,17 +294,12 @@ class UwbNode(Node):
         self.declare_parameter('udp_listen_port',  50000)
         self.declare_parameter('publish_rate_hz',  20.0)
         self.declare_parameter('frame_id',         'map')
-        self.declare_parameter('max_speed_mps',    3.0)  # outlier gate
 
         transport_name  = self.get_parameter('transport').value
         serial_port     = self.get_parameter('serial_port').value
         serial_baud     = self.get_parameter('serial_baud').value
         rate_hz         = float(self.get_parameter('publish_rate_hz').value)
         self._frame_id  = self.get_parameter('frame_id').value
-        max_speed       = float(self.get_parameter('max_speed_mps').value)
-
-        # Max step distance per publish period for outlier gate
-        self._max_step_m = max_speed / rate_hz
 
         # Anchor table — informational (DWM does trilateration internally)
         try:
@@ -338,12 +329,6 @@ class UwbNode(Node):
         # ---- Publisher ----
         self._pub = self.create_publisher(PoseStamped, '/onboard/sensors/uwb/pose', _BE_QOS)
 
-        # ---- State for outlier rejection ----
-        self._last_x: Optional[float] = None
-        self._last_y: Optional[float] = None
-        self._last_z: Optional[float] = None
-        self._last_received_at: float = 0.0
-
         # ---- Timer ----
         self._timer = self.create_timer(1.0 / rate_hz, self._on_timer)
 
@@ -361,29 +346,8 @@ class UwbNode(Node):
         if not sample.is_new:
             return
 
-        # Outlier gate — skip physically implausible jumps
-        if self._last_x is not None:
-            step = math.sqrt(
-                (sample.x_m - self._last_x) ** 2 +
-                (sample.y_m - self._last_y) ** 2 +
-                (sample.z_m - self._last_z) ** 2
-            )
-            if step > self._max_step_m:
-                self.get_logger().warn(
-                    'uwb_node: outlier rejected (step=%.2fm > max=%.2fm)',
-                    step, self._max_step_m
-                )
-                # Mark consumed so we don't spam warnings
-                sample.is_new = False  # type: ignore[misc]  # frozen=False
-                return
-
         # Mark consumed
         sample.is_new = False  # type: ignore[misc]
-
-        self._last_x = sample.x_m
-        self._last_y = sample.y_m
-        self._last_z = sample.z_m
-        self._last_received_at = sample.received_at
 
         # Build and publish PoseStamped
         now = self.get_clock().now().to_msg()
