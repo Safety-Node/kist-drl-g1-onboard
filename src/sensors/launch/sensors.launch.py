@@ -110,7 +110,10 @@ def generate_launch_description():
                 'enable_depth':               str(cam.get('enable_depth', True)).lower(),
                 'rgb_camera.color_profile':   color_profile,
                 'depth_module.depth_profile': depth_profile,
-                # TODO(REQ-42) [TASK-32]: tune QoS / pointcloud / align_depth_to_color.
+                # Align depth to the color frame for fused color+depth use.
+                'align_depth.enable':         'true',
+                'pointcloud.enable':          'false',
+                # TODO(REQ-42) [TASK-32]: tune QoS.
             }.items(),
         ))
     except Exception as e:
