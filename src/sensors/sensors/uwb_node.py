@@ -176,8 +176,11 @@ class SerialTransport(UwbTransport):
     def _enter_shell(self, ser, timeout: float = 4.0) -> None:
         ser.reset_input_buffer()
         ser.reset_output_buffer()
-        # Two CR presses to wake shell
-        ser.write(b"\r\r")
+        # Two CR presses to wake shell — with delay so DWM has time to respond
+        ser.write(b"\r")
+        ser.flush()
+        time.sleep(0.2)
+        ser.write(b"\r")
         ser.flush()
 
         buf = bytearray()
