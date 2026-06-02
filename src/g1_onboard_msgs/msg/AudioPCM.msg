@@ -10,6 +10,13 @@
 # path opt in without re-spinning the wire format, but current consumers
 # (speaker_node, STT Provider) assume the locked values.
 
+# Locked-format constants — single source of truth. Producers fill the fields
+# with these (mic_node), consumers validate against them (speaker_node). Use
+# AudioPCM.SAMPLE_RATE / CHANNELS / BIT_DEPTH instead of re-declaring literals.
+uint32 SAMPLE_RATE=16000     # Hz
+uint8  CHANNELS=1            # mono
+uint8  BIT_DEPTH=16         # bits per sample (signed little-endian)
+
 std_msgs/Header header
 uint32 sample_rate           # Hz (pipeline: 16000)
 uint8  channels              # channel count (pipeline: 1)
