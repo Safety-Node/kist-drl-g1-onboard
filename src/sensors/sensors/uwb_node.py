@@ -57,7 +57,6 @@ class UwbSample:
     z_m: float
     quality: int        # 0-100; DWM quality factor
     received_at: float  # time.monotonic()
-    is_new: bool        # False after the sample has been published once
 
 
 class UwbTransport(abc.ABC):
@@ -254,7 +253,7 @@ class SerialTransport(UwbTransport):
         if q <= 0:
             return None  # quality=0 means no fix
         return UwbSample(x_m=x, y_m=y, z_m=z, quality=q,
-                         received_at=time.monotonic(), is_new=True)
+                         received_at=time.monotonic())
 
 
 class UdpTransport(UwbTransport):
@@ -292,7 +291,7 @@ class UwbNode(Node):
         self.declare_parameter('serial_port',      '/dev/uwb')
         self.declare_parameter('serial_baud',      115200)
         self.declare_parameter('udp_listen_port',  50000)
-        self.declare_parameter('publish_rate_hz',  20.0)
+        self.declare_parameter('publish_rate_hz',  10.0)
         self.declare_parameter('frame_id',         'map')
 
         transport_name  = self.get_parameter('transport').value
@@ -341,13 +340,6 @@ class UwbNode(Node):
         sample = self._transport.latest_sample()
         if sample is None:
             return  # no fix — publish nothing
-
-        # Dedup — skip if this sample was already published
-        if not sample.is_new:
-            return
-
-        # Mark consumed
-        sample.is_new = False  # type: ignore[misc]
 
         # Build and publish PoseStamped
         now = self.get_clock().now().to_msg()
