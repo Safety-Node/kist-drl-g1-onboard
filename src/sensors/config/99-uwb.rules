@@ -1,0 +1,21 @@
+# udev rule for Decawave DWM UWB module (USB-serial via CDC-ACM).
+#
+# Creates /dev/uwb symlink so the serial_port config stays stable across
+# reboots regardless of ttyACM* enumeration order.
+#
+# Install:
+#   sudo cp 99-uwb.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Verify after plugging device:
+#   ls -la /dev/uwb
+#
+# Note: if ModemManager or brltty interferes (grabs ttyACM* briefly on
+# connect), disable for this device:
+#   sudo systemctl mask ModemManager   # if not needed for cellular/GPS
+#
+# Decawave DWM1001 / DWM3001CDK USB VID:PID = 0x0483:0x5740 (STMicro CDC-ACM)
+# Adjust idVendor/idProduct if your module uses a different USB bridge chip.
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", \
+    SYMLINK+="uwb", GROUP="dialout", MODE="0660"
