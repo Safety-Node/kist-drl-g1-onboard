@@ -59,7 +59,6 @@ uwb_node:
     transport: "serial"           # "stub" | "serial" | "udp"
     serial_port: "/dev/uwb"       # udev symlink → /dev/ttyACM* (see config/99-uwb.rules)
     serial_baud: 115200
-    udp_listen_port: 50000        # reserved (transport=="udp", not yet implemented)
     publish_rate_hz: 10.0
 
     # Frame conventions

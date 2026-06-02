@@ -256,19 +256,6 @@ class SerialTransport(UwbTransport):
                          received_at=time.monotonic())
 
 
-class UdpTransport(UwbTransport):
-    """UDP receiver — placeholder (not yet implemented)."""
-
-    def start(self) -> None:
-        raise NotImplementedError("UdpTransport: not implemented [TASK-30]")
-
-    def stop(self) -> None:
-        pass
-
-    def latest_sample(self) -> Optional[UwbSample]:
-        return None
-
-
 # ---------------------------------------------------------------------------
 # ROS2 node
 # ---------------------------------------------------------------------------
@@ -290,7 +277,6 @@ class UwbNode(Node):
         self.declare_parameter('transport',        'stub')
         self.declare_parameter('serial_port',      '/dev/uwb')
         self.declare_parameter('serial_baud',      115200)
-        self.declare_parameter('udp_listen_port',  50000)
         self.declare_parameter('publish_rate_hz',  10.0)
         self.declare_parameter('frame_id',         'map')
 
@@ -313,8 +299,6 @@ class UwbNode(Node):
         # ---- Transport ----
         if transport_name == 'serial':
             self._transport: UwbTransport = SerialTransport(serial_port, serial_baud)
-        elif transport_name == 'udp':
-            self._transport = UdpTransport()
         else:
             if transport_name != 'stub':
                 self.get_logger().warn(
