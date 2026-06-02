@@ -6,7 +6,9 @@ Replaces SLAM-based localisation (REQ-37).
 Hardware
 --------
 Decawave DWM series (DWM1001 / DWM3001CDK etc.) connected via USB-serial.
-udev rule creates /dev/uwb symlink (see config/99-uwb.rules).
+Device node is /dev/uwb — set up the udev symlink on the target machine:
+  SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", SYMLINK+="uwb"
+  (DWM1001: VID=0483, PID=5740; verify with ``lsusb`` if using a different module)
 
 Protocol (DWM UART shell)
 -------------------------
