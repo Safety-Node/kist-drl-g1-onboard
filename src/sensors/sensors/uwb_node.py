@@ -7,8 +7,8 @@ Hardware
 --------
 Decawave DWM series (DWM1001 / DWM3001CDK etc.) connected via USB-serial.
 Device node is /dev/uwb — set up the udev symlink on the target machine:
-  SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", SYMLINK+="uwb"
-  (DWM1001: VID=0483, PID=5740; verify with ``lsusb`` if using a different module)
+  SUBSYSTEM=="tty", ATTRS{idVendor}=="1366", ATTRS{idProduct}=="0105", SYMLINK+="uwb"
+  (DWM1001-DEV: VID=1366, PID=0105, SEGGER J-Link OB; verify with ``udevadm info /dev/ttyACM0 | grep ID_``)
 
 Protocol (DWM UART shell)
 -------------------------
