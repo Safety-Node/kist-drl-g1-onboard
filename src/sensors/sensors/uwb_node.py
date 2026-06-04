@@ -196,10 +196,11 @@ class SerialTransport(UwbTransport):
                     buf.clear()
                     ser.write(b"lec\r")
                     ser.flush()
-                    time.sleep(0.15)
-                    ser.reset_input_buffer()
+                    time.sleep(0.3)
                     buf.clear()
-                    # Now wait for dwm> again
+                    # Nudge to get dwm> prompt, then wait again
+                    ser.write(b"\r")
+                    ser.flush()
                     deadline = time.monotonic() + timeout
             else:
                 time.sleep(0.01)
