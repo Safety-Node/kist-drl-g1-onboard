@@ -294,7 +294,7 @@ class UwbNode(Node):
             anchors = self.get_parameters_by_prefix('anchors')
             if anchors:
                 self.get_logger().info(
-                    'uwb_node: %d anchor(s) in config (informational)', len(anchors)
+                    f'uwb_node: {len(anchors)} anchor(s) in config (informational)'
                 )
         except Exception:
             pass
@@ -305,8 +305,7 @@ class UwbNode(Node):
         else:
             if transport_name != 'stub':
                 self.get_logger().warn(
-                    "uwb_node: unknown transport '%s', falling back to stub",
-                    transport_name
+                    f"uwb_node: unknown transport '{transport_name}', falling back to stub"
                 )
             self._transport = StubTransport()
 
@@ -319,8 +318,7 @@ class UwbNode(Node):
         self._timer = self.create_timer(1.0 / rate_hz, self._on_timer)
 
         self.get_logger().info(
-            'uwb_node started (transport=%s, port=%s, rate=%.1fHz)',
-            transport_name, serial_port, rate_hz
+            f'uwb_node started (transport={transport_name}, port={serial_port}, rate={rate_hz:.1f}Hz)'
         )
 
     def _on_timer(self) -> None:
