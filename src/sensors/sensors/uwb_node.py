@@ -204,7 +204,7 @@ class SerialTransport(UwbTransport):
                     deadline = time.monotonic() + timeout
             else:
                 time.sleep(0.01)
-        logging.warning("UwbSerial: _enter_shell timeout, received: %r", bytes(buf))
+        print(f"UwbSerial: _enter_shell timeout, received: {bytes(buf)!r}", flush=True)
         raise RuntimeError(f"UwbSerial: failed to enter DWM shell on {self._port}")
 
     def _start_lec(self, ser, timeout: float = 2.0) -> None:
