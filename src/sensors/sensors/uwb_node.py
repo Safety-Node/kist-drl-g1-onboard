@@ -138,7 +138,8 @@ class SerialTransport(UwbTransport):
                     self._port, self._baud, timeout=0.2,
                     dsrdtr=False, rtscts=False,
                 )
-                time.sleep(1.5)  # wait for DWM to boot after DTR/port open
+                ser.dtr = False  # prevent J-Link OB from resetting DWM on port open
+                time.sleep(0.3)
                 self._init_streaming(ser)
                 backoff = self._RECONNECT_BASE_S  # reset on success
                 self._read_loop(ser)
