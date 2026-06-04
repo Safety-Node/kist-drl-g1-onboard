@@ -178,19 +178,21 @@ class SerialTransport(UwbTransport):
         self._enter_shell(ser)
         self._start_lec(ser)
 
-    def _enter_shell(self, ser, timeout: float = 4.0) -> None:
+    def _enter_shell(self, ser, timeout: float = 6.0) -> None:
         ser.reset_input_buffer()
         ser.reset_output_buffer()
-        # Two CR presses to wake shell — with delay so DWM has time to respond
-        ser.write(b"\r")
-        ser.flush()
-        time.sleep(0.2)
-        ser.write(b"\r")
-        ser.flush()
 
         buf = bytearray()
         deadline = time.monotonic() + timeout
+        last_cr = time.monotonic() - 1.0  # trigger immediate first CR
+
         while time.monotonic() < deadline:
+            # Periodically nudge with CR so DWM responds at any boot stage
+            if time.monotonic() - last_cr >= 0.5:
+                ser.write(b"\r")
+                ser.flush()
+                last_cr = time.monotonic()
+
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
                 buf.extend(ser.read(n))
@@ -203,12 +205,11 @@ class SerialTransport(UwbTransport):
                     ser.flush()
                     time.sleep(0.3)
                     buf.clear()
-                    # Nudge to get dwm> prompt, then wait again
-                    ser.write(b"\r")
-                    ser.flush()
+                    last_cr = time.monotonic() - 1.0  # force CR soon
                     deadline = time.monotonic() + timeout
             else:
                 time.sleep(0.01)
+
         print(f"UwbSerial: _enter_shell timeout, received: {bytes(buf)!r}", flush=True)
         raise RuntimeError(f"UwbSerial: failed to enter DWM shell on {self._port}")
 
