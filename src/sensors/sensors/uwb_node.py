@@ -134,7 +134,11 @@ class SerialTransport(UwbTransport):
         while self._running:
             ser = None
             try:
-                ser = serial.Serial(self._port, self._baud, timeout=0.2)
+                ser = serial.Serial(
+                    self._port, self._baud, timeout=0.2,
+                    dsrdtr=False, rtscts=False,
+                )
+                time.sleep(1.5)  # wait for DWM to boot after DTR/port open
                 self._init_streaming(ser)
                 backoff = self._RECONNECT_BASE_S  # reset on success
                 self._read_loop(ser)
