@@ -188,20 +188,29 @@ class SerialTransport(UwbTransport):
         while time.monotonic() < deadline:
             # Periodically nudge with CR so DWM responds at any boot stage
             if time.monotonic() - last_cr >= 0.5:
-                ser.write(b"\r")
-                ser.flush()
+                try:
+                    ser.write(b"\r")
+                    ser.flush()
+                except OSError:
+                    pass  # USB temporarily disconnected during DWM reset, retry
                 last_cr = time.monotonic()
 
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                buf.extend(ser.read(n))
+                try:
+                    buf.extend(ser.read(n))
+                except OSError:
+                    pass
                 if b"dwm>" in buf:
                     return
                 # Already in lec streaming — toggle off first
                 if b"DIST" in buf or b"POS" in buf:
                     buf.clear()
-                    ser.write(b"lec\r")
-                    ser.flush()
+                    try:
+                        ser.write(b"lec\r")
+                        ser.flush()
+                    except OSError:
+                        pass
                     time.sleep(0.3)
                     buf.clear()
                     last_cr = time.monotonic() - 1.0  # force CR soon
