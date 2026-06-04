@@ -179,7 +179,6 @@ class SerialTransport(UwbTransport):
         self._start_lec(ser)
 
     def _enter_shell(self, ser, timeout: float = 6.0) -> None:
-        ser.reset_input_buffer()
         ser.reset_output_buffer()
 
         buf = bytearray()
