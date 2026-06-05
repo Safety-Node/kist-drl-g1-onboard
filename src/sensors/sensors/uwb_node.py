@@ -136,10 +136,9 @@ class SerialTransport(UwbTransport):
                     self._port, self._baud, timeout=0.2,
                     dsrdtr=False, rtscts=False,
                 )
-                print("UwbSerial: port opened, entering shell...", flush=True)
-                self._enter_shell(ser)
-                self._start_lec(ser)
-                print("UwbSerial: lec streaming started", flush=True)
+                print("UwbSerial: port opened, checking DWM state...", flush=True)
+                self._init_streaming(ser)
+                print("UwbSerial: lec streaming active", flush=True)
                 self._read_loop(ser)
             except OSError as exc:
                 # Physical disconnect or device not found — wait before retry
@@ -173,51 +172,50 @@ class SerialTransport(UwbTransport):
             else:
                 time.sleep(0.005)
 
-    def _enter_shell(self, ser) -> None:
-        """Enter DWM shell prompt.
+    def _init_streaming(self, ser) -> None:
+        """Detect DWM state and skip already-done steps.
 
-        Strategy: listen first — DWM outputs ``dwm>`` automatically on power-up
-        or after ``\\r``. Only nudge with ``\\r`` after 2 s of silence to avoid
-        disturbing the MCU at a bad moment.
+        Decision tree:
+          DIST/POS visible → lec already running → go straight to read loop
+          dwm> visible     → shell active, just send lec
+          otherwise        → enter shell first, then send lec
         """
+        time.sleep(0.3)  # let DWM output settle after port open
         buf = bytearray()
-        last_data_t = time.monotonic()
-        last_nudge_t = time.monotonic()
+        n = int(getattr(ser, "in_waiting", 0) or 0)
+        if n > 0:
+            buf.extend(ser.read(n))
+
+        if b"DIST," in buf or b"POS," in buf:
+            print("UwbSerial: lec already streaming, skipping init", flush=True)
+            return
+
+        if b"dwm>" in buf:
+            print("UwbSerial: shell active, starting lec", flush=True)
+            self._start_lec(ser)
+            return
+
+        # Unknown/silent state — enter shell then start lec
+        self._enter_shell(ser)
+        self._start_lec(ser)
+
+    def _enter_shell(self, ser) -> None:
+        """Send ``\\r`` repeatedly until ``dwm>`` prompt appears."""
+        buf = bytearray()
+        last_nudge_t = time.monotonic() - 2.0  # nudge immediately on entry
 
         while self._running:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                chunk = ser.read(n)
-                buf.extend(chunk)
-                last_data_t = time.monotonic()
-
+                buf.extend(ser.read(n))
                 if b"dwm>" in buf:
                     return
-
-                # lec streaming active — toggle off to get shell back
-                if b"DIST" in buf or b"POS" in buf:
-                    buf.clear()
-                    ser.write(b"lec\r")
-                    ser.flush()
-                    last_nudge_t = time.monotonic()
-                    continue
-
-                # After "bye!" re-enter with double CR
-                if b"bye!" in buf:
-                    buf.clear()
-                    time.sleep(0.1)
-                    ser.write(b"\r\r")
-                    ser.flush()
-                    last_nudge_t = time.monotonic()
-                    continue
-            else:
-                now = time.monotonic()
-                # Nudge after 2 s of silence
-                if now - max(last_data_t, last_nudge_t) >= 2.0:
-                    ser.write(b"\r")
-                    ser.flush()
-                    last_nudge_t = now
-                time.sleep(0.01)
+            now = time.monotonic()
+            if now - last_nudge_t >= 2.0:
+                ser.write(b"\r")
+                ser.flush()
+                last_nudge_t = now
+            time.sleep(0.01)
 
     def _start_lec(self, ser, timeout: float = 3.0) -> None:
         """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
