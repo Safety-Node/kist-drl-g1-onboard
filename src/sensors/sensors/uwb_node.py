@@ -132,12 +132,10 @@ class SerialTransport(UwbTransport):
         while self._running:
             ser = None
             try:
-                ser = serial.Serial(
-                    self._port, self._baud, timeout=0.2,
-                    dsrdtr=False, rtscts=False,
-                )
-                print("UwbSerial: port opened, checking DWM state...", flush=True)
-                self._init_streaming(ser)
+                ser = serial.Serial(self._port, self._baud, timeout=0.2)
+                print("UwbSerial: port opened, waiting for dwm>...", flush=True)
+                self._enter_shell(ser)
+                self._start_lec(ser)
                 print("UwbSerial: lec streaming active", flush=True)
                 self._read_loop(ser)
             except OSError as exc:
@@ -172,42 +170,9 @@ class SerialTransport(UwbTransport):
             else:
                 time.sleep(0.005)
 
-    def _init_streaming(self, ser) -> None:
-        """Detect DWM state and skip already-done steps.
-
-        Decision tree:
-          DIST/POS visible → lec already running → go straight to read loop
-          dwm> visible     → shell active, just send lec
-          otherwise        → enter shell first, then send lec
-        """
-        time.sleep(0.3)  # let DWM output settle after port open
-        buf = bytearray()
-        n = int(getattr(ser, "in_waiting", 0) or 0)
-        if n > 0:
-            buf.extend(ser.read(n))
-
-        print(f"UwbSerial: initial buf={bytes(buf)!r}", flush=True)
-
-        if b"DIST," in buf or b"POS," in buf:
-            print("UwbSerial: lec already streaming, skipping init", flush=True)
-            return
-
-        if b"dwm>" in buf:
-            print("UwbSerial: shell active, starting lec", flush=True)
-            self._start_lec(ser)
-            return
-
-        # Unknown/silent state — enter shell then start lec
-        print("UwbSerial: entering shell...", flush=True)
-        self._enter_shell(ser)
-        self._start_lec(ser)
-
     def _enter_shell(self, ser) -> None:
-        """Send ``\\r`` every 0.2 s until ``dwm>`` prompt appears."""
+        """Wait for ``dwm>`` prompt (appears automatically after DTR-triggered boot)."""
         buf = bytearray()
-        last_nudge_t = time.monotonic() - 0.2  # nudge immediately on entry
-        last_log_t = time.monotonic()
-
         while self._running:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
@@ -217,17 +182,10 @@ class SerialTransport(UwbTransport):
                 if b"dwm>" in buf:
                     print("UwbSerial: got dwm>", flush=True)
                     return
-            now = time.monotonic()
-            if now - last_nudge_t >= 0.2:
-                print("UwbSerial: tx \\r\\r", flush=True)
-                ser.write(b"\r\r")
-                ser.flush()
-                last_nudge_t = now
             time.sleep(0.01)
 
     def _start_lec(self, ser, timeout: float = 3.0) -> None:
         """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
-        ser.reset_input_buffer()
         ser.write(b"lec\r")
         ser.flush()
 
