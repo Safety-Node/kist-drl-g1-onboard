@@ -88,12 +88,11 @@ class StubTransport(UwbTransport):
 class SerialTransport(UwbTransport):
     """DWM UART shell — lec streaming, POS line parser.
 
-    Runs a background reader thread that reconnects on serial errors
-    with exponential backoff (max 16 s).
+    The port is opened **once** and kept open for the lifetime of the node.
+    Closing and re-opening causes DTR to toggle, which resets the DWM MCU
+    (J-Link OB behaviour). Only a true OSError (physical disconnect) triggers
+    a full re-open after waiting for the device node to reappear.
     """
-
-    _RECONNECT_BASE_S = 1.0
-    _RECONNECT_MAX_S = 16.0
 
     def __init__(self, port: str, baud: int) -> None:
         self._port = port
@@ -126,29 +125,41 @@ class SerialTransport(UwbTransport):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _reader_loop(self) -> None:
-        """Outer reconnect loop — retries with backoff on any error."""
-        import serial  # import here so stub/udp paths don't require pyserial
-
-        backoff = self._RECONNECT_BASE_S
+    def _wait_for_device(self) -> None:
+        """Block until the device node exists (USB reconnect / udev delay)."""
+        import os
         while self._running:
+            if os.path.exists(self._port):
+                return
+            print(f"UwbSerial: waiting for {self._port} ...", flush=True)
+            time.sleep(2.0)
+
+    def _reader_loop(self) -> None:
+        """Outer loop — open port once, re-open only on physical disconnect."""
+        import serial
+
+        while self._running:
+            self._wait_for_device()
+            if not self._running:
+                return
+
             ser = None
             try:
                 ser = serial.Serial(
                     self._port, self._baud, timeout=0.2,
+                    dsrdtr=False, rtscts=False,
                 )
-                time.sleep(0.3)
-                self._init_streaming(ser)
-                backoff = self._RECONNECT_BASE_S  # reset on success
+                print("UwbSerial: port opened, entering shell...", flush=True)
+                self._enter_shell(ser)
+                self._start_lec(ser)
+                print("UwbSerial: lec streaming started", flush=True)
                 self._read_loop(ser)
+            except OSError as exc:
+                # Physical disconnect — close and wait for device to reappear
+                print(f"UwbSerial: OSError ({exc}), waiting for reconnect...", flush=True)
             except Exception as exc:
-                if self._running:
-                    import logging
-                    logging.warning(
-                        "UwbSerial: error (%s), reconnecting in %.1fs", exc, backoff
-                    )
-                    time.sleep(backoff)
-                    backoff = min(backoff * 2, self._RECONNECT_MAX_S)
+                print(f"UwbSerial: unexpected error ({exc}), retrying...", flush=True)
+                time.sleep(1.0)
             finally:
                 if ser is not None:
                     try:
@@ -157,10 +168,13 @@ class SerialTransport(UwbTransport):
                         pass
 
     def _read_loop(self, ser) -> None:
-        """Inner read loop — exits on serial error or stop()."""
+        """Inner read loop — exits on OSError (physical disconnect) or stop()."""
         buf = bytearray()
         while self._running:
-            n = int(getattr(ser, "in_waiting", 0) or 0)
+            try:
+                n = int(getattr(ser, "in_waiting", 0) or 0)
+            except OSError:
+                raise
             if n > 0:
                 buf.extend(ser.read(n))
                 for line in self._extract_lines(buf):
@@ -171,55 +185,54 @@ class SerialTransport(UwbTransport):
             else:
                 time.sleep(0.005)
 
-    def _init_streaming(self, ser) -> None:
-        """Enter DWM shell and start lec mode."""
-        self._enter_shell(ser)
-        self._start_lec(ser)
+    def _enter_shell(self, ser) -> None:
+        """Enter DWM shell prompt.
 
-    def _enter_shell(self, ser, timeout: float = 6.0) -> None:
-        ser.reset_output_buffer()
-
+        Strategy: listen first — DWM outputs ``dwm>`` automatically on power-up
+        or after ``\\r``. Only nudge with ``\\r`` after 2 s of silence to avoid
+        disturbing the MCU at a bad moment.
+        """
         buf = bytearray()
-        deadline = time.monotonic() + timeout
-        last_cr = time.monotonic() - 1.0  # trigger immediate first CR
+        last_data_t = time.monotonic()
+        last_nudge_t = time.monotonic()
 
-        while time.monotonic() < deadline:
-            # Periodically nudge with CR so DWM responds at any boot stage
-            if time.monotonic() - last_cr >= 0.5:
-                try:
-                    ser.write(b"\r")
-                    ser.flush()
-                except OSError:
-                    pass  # USB temporarily disconnected during DWM reset, retry
-                last_cr = time.monotonic()
-
+        while self._running:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                try:
-                    buf.extend(ser.read(n))
-                except OSError:
-                    pass
+                chunk = ser.read(n)
+                buf.extend(chunk)
+                last_data_t = time.monotonic()
+
                 if b"dwm>" in buf:
                     return
-                # Already in lec streaming — toggle off first
+
+                # lec streaming active — toggle off to get shell back
                 if b"DIST" in buf or b"POS" in buf:
                     buf.clear()
-                    try:
-                        ser.write(b"lec\r")
-                        ser.flush()
-                    except OSError:
-                        pass
-                    time.sleep(0.3)
+                    ser.write(b"lec\r")
+                    ser.flush()
+                    last_nudge_t = time.monotonic()
+                    continue
+
+                # After "bye!" re-enter with double CR
+                if b"bye!" in buf:
                     buf.clear()
-                    last_cr = time.monotonic() - 1.0  # force CR soon
-                    deadline = time.monotonic() + timeout
+                    time.sleep(0.1)
+                    ser.write(b"\r\r")
+                    ser.flush()
+                    last_nudge_t = time.monotonic()
+                    continue
             else:
+                now = time.monotonic()
+                # Nudge after 2 s of silence
+                if now - max(last_data_t, last_nudge_t) >= 2.0:
+                    ser.write(b"\r")
+                    ser.flush()
+                    last_nudge_t = now
                 time.sleep(0.01)
 
-        print(f"UwbSerial: _enter_shell timeout, received: {bytes(buf)!r}", flush=True)
-        raise RuntimeError(f"UwbSerial: failed to enter DWM shell on {self._port}")
-
-    def _start_lec(self, ser, timeout: float = 2.0) -> None:
+    def _start_lec(self, ser, timeout: float = 3.0) -> None:
+        """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
         ser.reset_input_buffer()
         ser.write(b"lec\r")
         ser.flush()
@@ -231,7 +244,7 @@ class SerialTransport(UwbTransport):
             if n > 0:
                 buf.extend(ser.read(n))
                 if b"DIST" in buf or b"POS" in buf or b"dwm>" in buf:
-                    return  # accepted (no anchors = dwm> is ok)
+                    return
             else:
                 time.sleep(0.01)
         raise RuntimeError("UwbSerial: lec command not acknowledged")
