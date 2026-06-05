@@ -208,13 +208,16 @@ class SerialTransport(UwbTransport):
         """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
         ser.write(b"lec\r")
         ser.flush()
+        print("UwbSerial: sent lec, waiting for ack...", flush=True)
 
         buf = bytearray()
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                buf.extend(ser.read(n))
+                chunk = ser.read(n)
+                buf.extend(chunk)
+                print(f"UwbSerial: lec rx {chunk!r}", flush=True)
                 if b"DIST" in buf or b"POS" in buf or b"dwm>" in buf:
                     return
             else:
