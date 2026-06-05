@@ -133,33 +133,27 @@ class SerialTransport(UwbTransport):
             ser = None
             try:
                 ser = serial.Serial(self._port, self._baud, timeout=0.2)
-                print("UwbSerial: port opened, detecting state...", flush=True)
                 time.sleep(0.3)
 
                 buf = bytearray()
                 n = int(getattr(ser, "in_waiting", 0) or 0)
                 if n > 0:
                     buf.extend(ser.read(n))
-                print(f"UwbSerial: initial={bytes(buf)!r}", flush=True)
 
                 if b"DIST" in buf or b"POS" in buf:
-                    print("UwbSerial: lec already streaming", flush=True)
+                    pass  # lec already streaming
                 elif b"dwm>" in buf:
-                    print("UwbSerial: at shell prompt, starting lec", flush=True)
                     self._start_lec(ser)
                 else:
-                    print("UwbSerial: entering shell...", flush=True)
                     self._enter_shell(ser)
                     self._start_lec(ser)
 
-                print("UwbSerial: lec streaming active", flush=True)
                 self._read_loop(ser)
             except OSError as exc:
-                # Physical disconnect or device not found — wait before retry
                 print(f"UwbSerial: OSError ({exc}), retrying in 2s...", flush=True)
                 time.sleep(2.0)
             except Exception as exc:
-                print(f"UwbSerial: unexpected error ({exc}), retrying...", flush=True)
+                print(f"UwbSerial: error ({exc}), retrying...", flush=True)
                 time.sleep(1.0)
             finally:
                 if ser is not None:
@@ -200,14 +194,10 @@ class SerialTransport(UwbTransport):
         while time.monotonic() < deadline:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                chunk = ser.read(n)
-                buf.extend(chunk)
-                print(f"UwbSerial: rx {chunk!r}", flush=True)
+                buf.extend(ser.read(n))
                 if b"dwm>" in buf:
-                    print("UwbSerial: got dwm>", flush=True)
                     return
                 if b"DIST" in buf or b"POS" in buf:
-                    print("UwbSerial: lec active, toggling off", flush=True)
                     buf.clear()
                     ser.write(b"lec\r")
                     ser.flush()
@@ -221,7 +211,6 @@ class SerialTransport(UwbTransport):
         """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
         ser.write(b"lec\r")
         ser.flush()
-        print("UwbSerial: sent lec, waiting for ack...", flush=True)
 
         buf = bytearray()
         deadline = time.monotonic() + timeout
