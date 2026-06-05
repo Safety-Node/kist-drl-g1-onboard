@@ -170,10 +170,21 @@ class SerialTransport(UwbTransport):
             else:
                 time.sleep(0.005)
 
-    def _enter_shell(self, ser) -> None:
-        """Wait for ``dwm>`` prompt (appears automatically after DTR-triggered boot)."""
+    def _enter_shell(self, ser, timeout: float = 3.0) -> None:
+        """Send \\r\\r and wait for dwm> prompt; toggle lec off if streaming."""
+        ser.reset_input_buffer()
+        ser.reset_output_buffer()
+
+        ser.write(b"\r")
+        ser.flush()
+        time.sleep(0.1)
+        ser.write(b"\r")
+        ser.flush()
+
         buf = bytearray()
-        while self._running:
+        deadline = time.monotonic() + timeout
+
+        while time.monotonic() < deadline:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
                 chunk = ser.read(n)
@@ -182,7 +193,16 @@ class SerialTransport(UwbTransport):
                 if b"dwm>" in buf:
                     print("UwbSerial: got dwm>", flush=True)
                     return
-            time.sleep(0.01)
+                if b"DIST" in buf or b"POS" in buf:
+                    print("UwbSerial: lec active, toggling off", flush=True)
+                    buf.clear()
+                    ser.write(b"lec\r")
+                    ser.flush()
+                    time.sleep(0.1)
+            else:
+                time.sleep(0.01)
+
+        raise RuntimeError("UwbSerial: failed to enter DWM shell")
 
     def _start_lec(self, ser, timeout: float = 3.0) -> None:
         """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
