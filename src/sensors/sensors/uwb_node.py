@@ -200,9 +200,9 @@ class SerialTransport(UwbTransport):
         self._start_lec(ser)
 
     def _enter_shell(self, ser) -> None:
-        """Send ``\\r`` repeatedly until ``dwm>`` prompt appears."""
+        """Send ``\\r`` every 0.2 s until ``dwm>`` prompt appears."""
         buf = bytearray()
-        last_nudge_t = time.monotonic() - 2.0  # nudge immediately on entry
+        last_nudge_t = time.monotonic() - 0.2  # nudge immediately on entry
 
         while self._running:
             n = int(getattr(ser, "in_waiting", 0) or 0)
@@ -211,7 +211,7 @@ class SerialTransport(UwbTransport):
                 if b"dwm>" in buf:
                     return
             now = time.monotonic()
-            if now - last_nudge_t >= 2.0:
+            if now - last_nudge_t >= 0.2:
                 ser.write(b"\r")
                 ser.flush()
                 last_nudge_t = now
