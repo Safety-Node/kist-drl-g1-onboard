@@ -133,9 +133,25 @@ class SerialTransport(UwbTransport):
             ser = None
             try:
                 ser = serial.Serial(self._port, self._baud, timeout=0.2)
-                print("UwbSerial: port opened, waiting for dwm>...", flush=True)
-                self._enter_shell(ser)
-                self._start_lec(ser)
+                print("UwbSerial: port opened, detecting state...", flush=True)
+                time.sleep(0.3)
+
+                buf = bytearray()
+                n = int(getattr(ser, "in_waiting", 0) or 0)
+                if n > 0:
+                    buf.extend(ser.read(n))
+                print(f"UwbSerial: initial={bytes(buf)!r}", flush=True)
+
+                if b"DIST" in buf or b"POS" in buf:
+                    print("UwbSerial: lec already streaming", flush=True)
+                elif b"dwm>" in buf:
+                    print("UwbSerial: at shell prompt, starting lec", flush=True)
+                    self._start_lec(ser)
+                else:
+                    print("UwbSerial: entering shell...", flush=True)
+                    self._enter_shell(ser)
+                    self._start_lec(ser)
+
                 print("UwbSerial: lec streaming active", flush=True)
                 self._read_loop(ser)
             except OSError as exc:
@@ -171,10 +187,7 @@ class SerialTransport(UwbTransport):
                 time.sleep(0.005)
 
     def _enter_shell(self, ser, timeout: float = 3.0) -> None:
-        """Send \\r\\r and wait for dwm> prompt; toggle lec off if streaming."""
-        ser.reset_input_buffer()
-        ser.reset_output_buffer()
-
+        """Send \\r\\r and wait for dwm> prompt."""
         ser.write(b"\r")
         ser.flush()
         time.sleep(0.1)
