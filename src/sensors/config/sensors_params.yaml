@@ -59,21 +59,13 @@ camera_node:
     depth_height: 720
     depth_fps: 30
 
-# [TASK-30] UWB absolute pose (REQ-37). Vendor TBD — Strategy pattern UwbTransport ABC.
+# [TASK-30] UWB absolute pose (REQ-37). Decawave DWM series, DWM UART shell protocol.
 uwb_node:
   ros__parameters:
-    transport: "stub"             # "stub" | "serial" | "udp"  (stub returns zero pose)
-    serial_port: "/dev/ttyUSB0"   # TBD (when transport=="serial")
-    serial_baud: 115200           # TBD
-    udp_listen_port: 50000        # when transport=="udp"
-    publish_rate_hz: 20
+    transport: "serial"           # "stub" | "serial" | "udp"
+    serial_port: "/dev/uwb"       # udev symlink → /dev/ttyACM* (see config/99-uwb.rules)
+    serial_baud: 115200
+    publish_rate_hz: 10.0
 
     # Frame conventions
     frame_id: "map"
-    child_frame_id: "base_link"   # reserved — no TF broadcast (see TASK-30)
-
-    # Anchor calibration — TBD: site survey.
-    # Trilateration needs ≥ 3 non-collinear anchors. Placeholder paired with transport: "stub".
-    anchors:
-      # anchor_id: [x, y, z]  metres, map frame
-      placeholder_anchor_0: [0.0, 0.0, 2.5]
