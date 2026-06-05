@@ -125,24 +125,11 @@ class SerialTransport(UwbTransport):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _wait_for_device(self) -> None:
-        """Block until the device node exists (USB reconnect / udev delay)."""
-        import os
-        while self._running:
-            if os.path.exists(self._port):
-                return
-            print(f"UwbSerial: waiting for {self._port} ...", flush=True)
-            time.sleep(2.0)
-
     def _reader_loop(self) -> None:
         """Outer loop — open port once, re-open only on physical disconnect."""
         import serial
 
         while self._running:
-            self._wait_for_device()
-            if not self._running:
-                return
-
             ser = None
             try:
                 ser = serial.Serial(
@@ -155,8 +142,9 @@ class SerialTransport(UwbTransport):
                 print("UwbSerial: lec streaming started", flush=True)
                 self._read_loop(ser)
             except OSError as exc:
-                # Physical disconnect — close and wait for device to reappear
-                print(f"UwbSerial: OSError ({exc}), waiting for reconnect...", flush=True)
+                # Physical disconnect or device not found — wait before retry
+                print(f"UwbSerial: OSError ({exc}), retrying in 2s...", flush=True)
+                time.sleep(2.0)
             except Exception as exc:
                 print(f"UwbSerial: unexpected error ({exc}), retrying...", flush=True)
                 time.sleep(1.0)
