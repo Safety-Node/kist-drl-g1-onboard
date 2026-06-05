@@ -219,8 +219,8 @@ class SerialTransport(UwbTransport):
                     return
             now = time.monotonic()
             if now - last_nudge_t >= 0.2:
-                print("UwbSerial: tx \\r", flush=True)
-                ser.write(b"\r")
+                print("UwbSerial: tx \\r\\r", flush=True)
+                ser.write(b"\r\r")
                 ser.flush()
                 last_nudge_t = now
             time.sleep(0.01)
