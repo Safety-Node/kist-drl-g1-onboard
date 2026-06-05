@@ -8,7 +8,7 @@ mic_node:
   ros__parameters:
     group_ip: "239.168.123.161"   # robot PC1 multicast group
     port: 5555
-    iface_ip: "192.168.123.222"    # TBD: onboard NIC IP on 192.168.123.x (multicast join)
+    iface_ip: "192.168.123.164"    # TBD: onboard NIC IP on 192.168.123.x (multicast join)
     sample_rate: 16000            # LOCKED — AudioPCM.msg pipeline format
     channels: 1                   # mono — intentional G1 4-mic mix-down (see TASK-31)
     chunk_ms: 20                  # re-packetise UDP payloads → 20 ms (640 byte) chunks
