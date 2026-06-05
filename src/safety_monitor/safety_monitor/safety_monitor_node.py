@@ -40,9 +40,10 @@ Traps:
 - Self-watchdog: this node's own loop overrun → REASON_WATCHDOG (distinct from
   COMMS_TIMEOUT which is "upstream stopped talking").
 
-TODO(REQ-35) [TASK-33]: declare params + load joint_limits via prefix accessor.
 TODO(REQ-35) [TASK-33]: SHM byte open, all subscribers + publishers wired.
-TODO(REQ-35) [TASK-33]: validation pipeline (joint / velocity / proximity / rate / comms).
+TODO(REQ-35) [TASK-33]: validation pipeline (joint / proximity / rate / comms).
+                         Velocity-value validation dropped per CONV-012 2026-05-26;
+                         cmd_vel kept as watchdog-only stream.
 TODO(REQ-35) [TASK-33]: per-stream comms watchdog + state-stream staleness watchdog.
 TODO(REQ-35) [TASK-33]: self-watchdog (loop overrun → REASON_WATCHDOG + SHM set).
 TODO(REQ-35) [TASK-33]: EstopFlag heartbeat at estop_heartbeat_hz.
@@ -55,9 +56,40 @@ from rclpy.node import Node
 
 class SafetyMonitorNode(Node):
     def __init__(self) -> None:
-        super().__init__('safety_monitor')
-        # TODO(REQ-35) [TASK-33]: wire everything (see module docstring TODO list).
-        self.get_logger().info('safety_monitor_node started (TBD)')
+        # automatically_declare_parameters_from_overrides=True so the
+        # joint_limits.<name> entries from yaml are auto-declared and visible
+        # to get_parameters_by_prefix(). yaml is the single source of truth;
+        # launch + systemd always pass --params-file.
+        super().__init__(
+            'safety_monitor',
+            automatically_declare_parameters_from_overrides=True,
+        )
+
+        self._loop_rate_hz: int = self.get_parameter('loop_rate_hz').value
+        self._estop_shm_name: str = self.get_parameter('estop_shm_name').value
+        self._estop_heartbeat_hz: float = self.get_parameter('estop_heartbeat_hz').value
+        self._proximity_min_dist_m: float = self.get_parameter('proximity_min_dist_m').value
+        self._proximity_depth_pixel_thresh: int = self.get_parameter(
+            'proximity_depth_pixel_thresh').value
+        self._cmd_arm_timeout_s: float = self.get_parameter('cmd_arm_timeout_s').value
+        self._cmd_vel_timeout_s: float = self.get_parameter('cmd_vel_timeout_s').value
+        self._joint_rate_of_change_limit: float = self.get_parameter(
+            'joint_rate_of_change_limit').value
+
+        # joint_limits — yaml dict-of-list; flat ROS param store needs prefix accessor.
+        # Shape: {joint_name: (q_min, q_max, dq_max, tau_max)}
+        limit_params = self.get_parameters_by_prefix('joint_limits')
+        self._joint_limits: dict[str, tuple[float, float, float, float]] = {
+            name: tuple(p.value) for name, p in limit_params.items()
+        }
+
+        # TODO(REQ-35) [TASK-33]: wire SHM / subs / pubs / validation / watchdogs
+        #                          (see module docstring TODO list).
+        self.get_logger().info(
+            f'safety_monitor ready (params loaded, '
+            f'{len(self._joint_limits)} joints, '
+            f'loop={self._loop_rate_hz} Hz)'
+        )
 
 
 def main(args=None) -> None:

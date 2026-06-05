@@ -1,5 +1,6 @@
 # safety_monitor — runtime safety parameters. [TASK-33]
-# TODO(REQ-35) [TASK-33]: fill all limits from G1 SDK joint spec + kinematics review.
+# joint_limits populated from official G1 29-DOF URDF (see comment below).
+# Velocity / proximity bounds are operational policy choices — revisit before deployment.
 
 safety_monitor:
   ros__parameters:
@@ -15,18 +16,51 @@ safety_monitor:
 
     # Comms watchdog (per-stream — cmd/arm idle is not legitimate)
     cmd_arm_timeout_s: 0.5
-    cmd_vel_timeout_s: 2.0          # watchdog for PC Twist (NavigationProvider). REQ-35.
-
-    # Velocity limits on cmd_vel (Twist via PC NavigationProvider → comm_bridge)
-    max_linear_x: 0.6               # m/s, conservative
-    max_linear_y: 0.4               # m/s
-    max_angular_z: 0.8              # rad/s
+    cmd_vel_timeout_s: 2.0          # watchdog only — Twist value validation is NOT
+                                    # done in safety_monitor (CONV-012 2026-05-26).
 
     # Joint rate-of-change (single scalar intentional for demo;
     # promote to per-joint 5th field of joint_limits before deployment)
     joint_rate_of_change_limit: 0.20    # rad/tick at loop_rate_hz
 
     # Joint command bounds — dict-of-list; load via get_parameters_by_prefix('joint_limits').
+    # Values from official Unitree G1 29-DOF URDF (g1_29dof.urdf):
+    #   https://github.com/unitreerobotics/unitree_ros/blob/master/robots/g1_description/g1_29dof.urdf
+    # tau_max reflects G1 EDU peak (e.g. knee 139 Nm). For G1 Basic, knee tau_max ≈ 90 Nm —
+    # confirm model variant against KIST hardware before deployment (REQ-35).
     joint_limits:
-      # joint_name: [q_min, q_max, dq_max, tau_max]
-      placeholder_joint: [-1.57, 1.57, 2.0, 30.0]
+      # joint_name: [q_min, q_max, dq_max, tau_max]   # (rad, rad, rad/s, Nm)
+      # --- Left leg (0-5) ---
+      left_hip_pitch:        [-2.5307,    2.8798,    32.0,  88.0]
+      left_hip_roll:         [-0.5236,    2.9671,    32.0,  88.0]
+      left_hip_yaw:          [-2.7576,    2.7576,    32.0,  88.0]
+      left_knee:             [-0.087267,  2.8798,    20.0, 139.0]
+      left_ankle_pitch:      [-0.87267,   0.5236,    30.0,  35.0]
+      left_ankle_roll:       [-0.2618,    0.2618,    30.0,  35.0]
+      # --- Right leg (6-11) ---
+      right_hip_pitch:       [-2.5307,    2.8798,    32.0,  88.0]
+      right_hip_roll:        [-2.9671,    0.5236,    32.0,  88.0]
+      right_hip_yaw:         [-2.7576,    2.7576,    32.0,  88.0]
+      right_knee:            [-0.087267,  2.8798,    20.0, 139.0]
+      right_ankle_pitch:     [-0.87267,   0.5236,    30.0,  35.0]
+      right_ankle_roll:      [-0.2618,    0.2618,    30.0,  35.0]
+      # --- Waist (12-14) ---
+      waist_yaw:             [-2.618,     2.618,     32.0,  88.0]
+      waist_roll:            [-0.52,      0.52,      30.0,  35.0]
+      waist_pitch:           [-0.52,      0.52,      30.0,  35.0]
+      # --- Left arm (15-21) ---
+      left_shoulder_pitch:   [-3.0892,    2.6704,    37.0,  25.0]
+      left_shoulder_roll:    [-1.5882,    2.2515,    37.0,  25.0]
+      left_shoulder_yaw:     [-2.618,     2.618,     37.0,  25.0]
+      left_elbow:            [-1.0472,    2.0944,    37.0,  25.0]
+      left_wrist_roll:       [-1.972222054, 1.972222054, 37.0, 25.0]
+      left_wrist_pitch:      [-1.614429558, 1.614429558, 22.0,  5.0]
+      left_wrist_yaw:        [-1.614429558, 1.614429558, 22.0,  5.0]
+      # --- Right arm (22-28) ---
+      right_shoulder_pitch:  [-3.0892,    2.6704,    37.0,  25.0]
+      right_shoulder_roll:   [-2.2515,    1.5882,    37.0,  25.0]
+      right_shoulder_yaw:    [-2.618,     2.618,     37.0,  25.0]
+      right_elbow:           [-1.0472,    2.0944,    37.0,  25.0]
+      right_wrist_roll:      [-1.972222054, 1.972222054, 37.0, 25.0]
+      right_wrist_pitch:     [-1.614429558, 1.614429558, 22.0,  5.0]
+      right_wrist_yaw:       [-1.614429558, 1.614429558, 22.0,  5.0]
