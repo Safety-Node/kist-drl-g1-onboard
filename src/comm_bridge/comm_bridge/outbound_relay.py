@@ -1,33 +1,41 @@
 """
-Outbound relay /onboard/* → /bridge/*.
+Outbound relay /onboard/* → /bridge/*  (domain 0 → domain 1).
+
+Domain layout:
+  domain 0 — NX-internal: all /onboard/* topics (sensors, motor, safety …)
+  domain 1 — Bridge domain: shared with workstation /bridge/* topics
+
+Each relay entry subscribes on domain 0 and publishes on domain 1 so the
+workstation can see sensor data without being on the robot's internal domain.
+
+Executor: MultiThreadedExecutor on the domain-0 node so that large-message
+callbacks (e.g. 1.8 MB depth images at 30 Hz) do not block audio/IMU callbacks.
+Without this, a depth callback holding the executor for ~10-30 ms causes the
+depth=1 subscription queue for audio_pcm (50 Hz, 640 B) to overflow and drop
+roughly half the frames before the executor gets back to it.
+
+QoS "stream": BEST_EFFORT + depth=10 for continuous audio — absorbs brief
+scheduler jitter without accumulating stale frames (50 Hz drains the full queue
+in 200 ms). Large-image topics keep depth=1 ("freshness wins").
 
 Loads comm_bridge_params.yaml directly from the package share directory
 (yaml.safe_load). List-of-dict relay entries cannot be expressed as ROS 2
 parameters (rclpy raises InvalidParameterTypeException), so NO parameters=[]
 in the launch file — see comm_bridge.launch.py.
-
-Each relay entry (src, dst, type, qos) creates one subscriber + one publisher.
-Message types are imported dynamically: "sensor_msgs/msg/Imu" becomes
-  from sensor_msgs.msg import Imu
-
-Executor: MultiThreadedExecutor so that large-message callbacks (e.g. 1.8 MB
-depth images at 30 Hz) do not block audio/IMU callbacks on the same node.
-Without this, a depth-image callback holding the GIL for ~10-30 ms causes the
-depth=1 subscription queue for audio_pcm (50 Hz, 640 B) to overflow and drop
-roughly half the frames before the executor gets back to it.
-
-QoS "stream": BEST_EFFORT + depth=10 for continuous audio — prevents DDS from
-discarding frames during brief executor scheduling jitter.  Large-message sensor
-streams (depth, color) keep depth=1 ("freshness wins").
 """
 import importlib
+import threading
 
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from rclpy.context import Context
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+
+_DOMAIN_ONBOARD = 0  # NX-internal — /onboard/* topics
+_DOMAIN_BRIDGE = 1   # shared with workstation — /bridge/* topics
 
 _QOS_MAP = {
     # Large sensor frames: always want the latest, never accumulate stale data.
@@ -68,68 +76,93 @@ def _load_relays(yaml_path: str) -> list:
     return doc.get("outbound_relay", {}).get("ros__parameters", {}).get("relays", [])
 
 
-class OutboundRelay(Node):
-    def __init__(self) -> None:
-        super().__init__("outbound_relay")
+def main(args=None) -> None:
+    ctx_onboard = Context()
+    ctx_bridge = Context()
+    rclpy.init(context=ctx_onboard, args=args, domain_id=_DOMAIN_ONBOARD)
+    rclpy.init(context=ctx_bridge, args=[], domain_id=_DOMAIN_BRIDGE)
 
-        params_path = (
-            get_package_share_directory("comm_bridge") + "/config/comm_bridge_params.yaml"
-        )
+    # domain-0 node: subscribes /onboard/* topics
+    node_onboard = Node("outbound_relay_onboard", context=ctx_onboard)
+    # domain-1 node: publishes /bridge/* topics visible to workstation
+    node_bridge = Node("outbound_relay_bridge", context=ctx_bridge)
+    logger = node_onboard.get_logger()
+
+    params_path = (
+        get_package_share_directory("comm_bridge") + "/config/comm_bridge_params.yaml"
+    )
+
+    try:
+        relays = _load_relays(params_path)
+    except Exception as e:
+        logger.error(f"Failed to load relay config: {e}")
+        node_onboard.destroy_node()
+        node_bridge.destroy_node()
+        rclpy.shutdown(context=ctx_onboard)
+        rclpy.shutdown(context=ctx_bridge)
+        return
+
+    _refs: list = []  # keep sub/pub refs so GC doesn't collect them
+    count = 0
+
+    for entry in relays:
+        src = entry["src"]
+        dst = entry["dst"]
+        type_str = entry["type"]
+        qos_key = entry.get("qos", "best_effort")
 
         try:
-            relays = _load_relays(params_path)
+            msg_cls = _load_msg_class(type_str)
         except Exception as e:
-            self.get_logger().error(f"Failed to load relay config: {e}")
-            return
+            logger.error(f"Cannot import {type_str}: {e} — skipping {src}")
+            continue
 
-        self._pairs: list = []  # keep refs so GC doesn't collect sub/pub
+        qos = _QOS_MAP.get(qos_key)
+        if qos is None:
+            logger.warn(f"Unknown qos {qos_key!r} for {src} — falling back to best_effort")
+            qos = _QOS_MAP["best_effort"]
 
-        for entry in relays:
-            src = entry["src"]
-            dst = entry["dst"]
-            type_str = entry["type"]
-            qos_key = entry.get("qos", "best_effort")
+        # publisher lives on domain 1 (workstation-visible)
+        pub = node_bridge.create_publisher(msg_cls, dst, qos)
 
-            try:
-                msg_cls = _load_msg_class(type_str)
-            except Exception as e:
-                self.get_logger().error(f"Cannot import {type_str}: {e} — skipping {src}")
-                continue
+        def _make_cb(p):
+            def _cb(msg):
+                p.publish(msg)
+            return _cb
 
-            qos = _QOS_MAP.get(qos_key)
-            if qos is None:
-                self.get_logger().warn(
-                    f"Unknown qos {qos_key!r} for {src} — falling back to best_effort"
-                )
-                qos = _QOS_MAP["best_effort"]
+        # subscriber lives on domain 0 (onboard-internal)
+        sub = node_onboard.create_subscription(msg_cls, src, _make_cb(pub), qos)
+        _refs.append((sub, pub))
+        logger.info(f"relay  {src}  →  {dst}  [{qos_key}]")
+        count += 1
 
-            pub = self.create_publisher(msg_cls, dst, qos)
+    logger.info(
+        f"outbound_relay: {count} relay(s) active"
+        f" (domain {_DOMAIN_ONBOARD} → {_DOMAIN_BRIDGE})"
+    )
 
-            def _make_cb(p):
-                def _cb(msg):
-                    p.publish(msg)
-                return _cb
+    # domain-1 publisher node runs in a background thread (publish-only, lightweight)
+    exec_bridge = MultiThreadedExecutor(context=ctx_bridge)
+    exec_bridge.add_node(node_bridge)
+    t_bridge = threading.Thread(target=exec_bridge.spin, daemon=True, name="exec_bridge")
+    t_bridge.start()
 
-            sub = self.create_subscription(msg_cls, src, _make_cb(pub), qos)
-            self._pairs.append((sub, pub))
-            self.get_logger().info(f"relay  {src}  →  {dst}  [{qos_key}]")
-
-        self.get_logger().info(f"outbound_relay: {len(self._pairs)} relay(s) active")
-
-
-def main(args=None) -> None:
-    rclpy.init(args=args)
-    node = OutboundRelay()
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
+    # domain-0 subscriber node uses MultiThreadedExecutor so depth-image callbacks
+    # don't block audio/IMU callbacks
+    exec_onboard = MultiThreadedExecutor(context=ctx_onboard)
+    exec_onboard.add_node(node_onboard)
     try:
-        executor.spin()
+        exec_onboard.spin()
     except KeyboardInterrupt:
         pass
     finally:
-        executor.shutdown()
-        node.destroy_node()
-        rclpy.shutdown()
+        exec_onboard.shutdown()
+        exec_bridge.shutdown()
+        t_bridge.join(timeout=5.0)
+        node_onboard.destroy_node()
+        node_bridge.destroy_node()
+        rclpy.shutdown(context=ctx_onboard)
+        rclpy.shutdown(context=ctx_bridge)
 
 
 if __name__ == "__main__":
