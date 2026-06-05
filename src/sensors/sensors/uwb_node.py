@@ -136,9 +136,7 @@ class SerialTransport(UwbTransport):
             try:
                 ser = serial.Serial(
                     self._port, self._baud, timeout=0.2,
-                    dsrdtr=False, rtscts=False,
                 )
-                ser.dtr = False  # prevent J-Link OB from resetting DWM on port open
                 time.sleep(0.3)
                 self._init_streaming(ser)
                 backoff = self._RECONNECT_BASE_S  # reset on success
