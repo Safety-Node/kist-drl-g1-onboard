@@ -135,7 +135,8 @@ ENV PATH=/opt/cyclonedds/install/bin:${PATH}
 RUN python3 -m pip install \
     --no-cache-dir \
     --no-binary cyclonedds \
-    "cyclonedds==0.10.5"
+    "cyclonedds==0.10.5" \
+    pyserial
 
 # -----------------------------------------------------------------------------
 # Unitree SDK2 Python
