@@ -2,12 +2,18 @@
 # TODO(REQ-42): fill real values once HW driver wrappers are integrated.
 
 # [TASK-31] mic capture (Onboard → STT). LOCKED 16 kHz / 16-bit / mono pipeline.
+# Source is UDP multicast from the robot audio service (PC1), NOT a local ALSA
+# device (G1 4-mic array is owned by the robot — see g1_data_transport_차이).
 mic_node:
   ros__parameters:
-    capture_device: "default"     # TBD: e.g. "hw:CARD=Mic,DEV=0"
+    group_ip: "239.168.123.161"   # robot PC1 multicast group
+    port: 5555
+    iface_ip: "192.168.123.164"    # TBD: onboard NIC IP on 192.168.123.x (multicast join)
     sample_rate: 16000            # LOCKED — AudioPCM.msg pipeline format
     channels: 1                   # mono — intentional G1 4-mic mix-down (see TASK-31)
-    chunk_ms: 20                  # 20 ms chunk → ≈640 byte payload
+    chunk_ms: 20                  # re-packetise UDP payloads → 20 ms (640 byte) chunks
+    recv_buf_bytes: 65536
+    socket_timeout_sec: 5.0       # recv timeout; logs hint (not fatal) if no packets
 
 # [TASK-31] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
 speaker_node:
