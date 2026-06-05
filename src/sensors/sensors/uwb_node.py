@@ -186,6 +186,8 @@ class SerialTransport(UwbTransport):
         if n > 0:
             buf.extend(ser.read(n))
 
+        print(f"UwbSerial: initial buf={bytes(buf)!r}", flush=True)
+
         if b"DIST," in buf or b"POS," in buf:
             print("UwbSerial: lec already streaming, skipping init", flush=True)
             return
@@ -196,6 +198,7 @@ class SerialTransport(UwbTransport):
             return
 
         # Unknown/silent state — enter shell then start lec
+        print("UwbSerial: entering shell...", flush=True)
         self._enter_shell(ser)
         self._start_lec(ser)
 
@@ -203,15 +206,20 @@ class SerialTransport(UwbTransport):
         """Send ``\\r`` every 0.2 s until ``dwm>`` prompt appears."""
         buf = bytearray()
         last_nudge_t = time.monotonic() - 0.2  # nudge immediately on entry
+        last_log_t = time.monotonic()
 
         while self._running:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                buf.extend(ser.read(n))
+                chunk = ser.read(n)
+                buf.extend(chunk)
+                print(f"UwbSerial: rx {chunk!r}", flush=True)
                 if b"dwm>" in buf:
+                    print("UwbSerial: got dwm>", flush=True)
                     return
             now = time.monotonic()
             if now - last_nudge_t >= 0.2:
+                print("UwbSerial: tx \\r", flush=True)
                 ser.write(b"\r")
                 ser.flush()
                 last_nudge_t = now
