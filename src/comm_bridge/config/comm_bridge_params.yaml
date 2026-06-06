@@ -13,11 +13,11 @@
 #     pairs with /bridge/cmd/arm).
 #   - Ankle IMU outbound relays added (GearSonic input).
 #
-# 2026-05-26 (KIST 회의, workstation CONV-012 — partly reverses 2026-05-22):
+# 2026-05-26 (KIST 회의 — partly reverses 2026-05-22):
 #   - cmd_vel path 부활. PC NavigationProvider → /bridge/cmd/vel →
 #     comm_bridge → NX /onboard/cmd/vel → motor_controller LocoClient.Move
 #     (vx, vy, vyaw). Locomotion 은 더 이상 low-level VLA 가 아니라 PC
-#     NavigationProvider (Unitree SDK loco_client). CONV-005 범위 축소
+#     NavigationProvider (Unitree SDK loco_client). VLA 범위 축소
 #     (arm/hand only).
 #   - /bridge/cmd/low 는 유지하되 현재 활용 범위가 줄어듦 — VLA 가 lower
 #     body 를 다시 받게 되면 revisit.
@@ -91,14 +91,14 @@ inbound_relay:
         qos:  "reliable"
         # 2026-05-22: low-level VLA whole-body wire (rt/lowcmd path, weight
         # ignored). Pairs with /bridge/cmd/arm (rt/arm_sdk, weight respected).
-        # 2026-05-26 (CONV-012): cmd_vel path 부활으로 walking 은 더 이상
+        # 2026-05-26: cmd_vel path 부활으로 walking 은 더 이상
         # low-level VLA 가 아님. /bridge/cmd/low 는 유지하되 활용 범위가
         # arm/hand 보조 + 추후 VLA whole-body 복귀 대비 reserved.
       - src:  "/bridge/cmd/vel"
         dst:  "/onboard/cmd/vel"
         type: "geometry_msgs/msg/Twist"
         qos:  "reliable"
-        # 2026-05-26 (CONV-012): PC NavigationProvider walking velocity.
+        # 2026-05-26: PC NavigationProvider walking velocity.
         # NX motor_controller pops from velocity_buf at 100 Hz and calls
         # LocoClient.Move(vx, vy, vyaw). Discrete LocoClient presets
         # (StandUp/SitDown/...) stay on /bridge/cmd/loco below.
