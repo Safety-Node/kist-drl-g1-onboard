@@ -61,8 +61,7 @@ Full interface contract lives in the ICD database (link below).
 | `/onboard/sensors/uwb_pose` | `uwb_node` | consumed by PC `TaskSrvProvider` for sub-task success detection (no onboard navigation) |
 
 `imu_node` (added 2026-05-22, ownership unified 2026-05-23) owns all IMU
-streams; `joint_state_node` publishes joint states only. See the
-[Notion **CONV** page](https://app.notion.com/p/377b39de7dd780b391f3ceec30226a0e) for the rationale.
+streams; `joint_state_node` publishes joint states only.
 
 ---
 
@@ -70,7 +69,7 @@ streams; `joint_state_node` publishes joint states only. See the
 
 Code-level architectural decisions (topic namespace, audio
 sub-namespaces, IMU ownership, systemd isolation, build system,
-real-time budgets) are documented in the [Notion **CONV** page](https://app.notion.com/p/377b39de7dd780b391f3ceec30226a0e).
+real-time budgets) are settled in code review (no separate conventions doc is maintained).
 The C4 container diagram lives in the shared `KIST_DRL_G1_Arch.drawio`
 file (linked from Notion), not duplicated in this repo.
 
