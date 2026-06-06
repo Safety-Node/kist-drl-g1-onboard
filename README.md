@@ -62,7 +62,7 @@ Full interface contract lives in the ICD database (link below).
 
 `imu_node` (added 2026-05-22, ownership unified 2026-05-23) owns all IMU
 streams; `joint_state_node` publishes joint states only. See the
-[Notion **CONV** page](https://app.notion.com/p/377b39de7dd780b391f3ceec30226a0e) (CONV-003) for the rationale.
+[Notion **CONV** page](https://app.notion.com/p/377b39de7dd780b391f3ceec30226a0e) for the rationale.
 
 ---
 
@@ -70,7 +70,7 @@ streams; `joint_state_node` publishes joint states only. See the
 
 Code-level architectural decisions (topic namespace, audio
 sub-namespaces, IMU ownership, systemd isolation, build system,
-real-time budgets) are documented in the [Notion **CONV** page](https://app.notion.com/p/377b39de7dd780b391f3ceec30226a0e). In-code `CONV-xxx` citations refer to that page (same numbering; Notion is the single source of truth).
+real-time budgets) are documented in the [Notion **CONV** page](https://app.notion.com/p/377b39de7dd780b391f3ceec30226a0e).
 The C4 container diagram lives in the shared `KIST_DRL_G1_Arch.drawio`
 file (linked from Notion), not duplicated in this repo.
 

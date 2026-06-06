@@ -22,7 +22,7 @@ dispatches LocoClient FSM directly).
   bounds / proximity check / rate watchdog all need rerating; E-STOP budget
   remains 200 ms.
 
-2026-05-26 KIST 회의 (workstation CONV-012, partly reverses 2026-05-22):
+2026-05-26 KIST 회의 (partly reverses 2026-05-22):
 - cmd_vel watchdog active 다시: PC NavigationProvider Twist 부활했으므로
   /onboard/cmd/vel 도 per-stream comms watchdog 대상이다.
   validated_twist 는 여전히 dropped — motor_controller 가 PC Twist 받아
