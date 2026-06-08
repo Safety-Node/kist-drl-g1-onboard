@@ -25,11 +25,39 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import JointState
 
-from unitree_sdk2py.core.channel import (
-    ChannelFactoryInitialize,
-    ChannelSubscriber,
-)
+import unitree_sdk2py.core.channel as _sdk_ch
+from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+
+def _patch_channel_factory() -> None:
+    """Replace ChannelFactory.Init to skip Domain() creation.
+
+    rmw_cyclonedds_cpp and unitree_sdk2py share libddsc.so. Calling
+    Domain(0, config) after rclpy.init() raises DDSException because domain 0
+    already exists. We join the active domain via DomainParticipant() instead.
+    Mirrors imu_node.
+    """
+    from cyclonedds.domain import DomainParticipant as _DDP
+
+    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
+        if self.__class__._ChannelFactory__initialized:
+            return True
+        with self.__class__._ChannelFactory__init_lock:
+            if self.__class__._ChannelFactory__initialized:
+                return True
+            try:
+                self.__class__._ChannelFactory__participant = _DDP(id)
+            except Exception:
+                return False
+            self.__class__._ChannelFactory__qos = qos
+            self.__class__._ChannelFactory__initialized = True
+            return True
+
+    _sdk_ch.ChannelFactory.Init = _init
+
+
+_patch_channel_factory()
 
 
 # Sensor-stream QoS — matches imu_node and the comm_bridge outbound relay
@@ -71,10 +99,8 @@ class JointStateNode(Node):
         nic = str(self.get_parameter('network_interface').value)
         domain = int(self.get_parameter('domain_id').value)
 
-        if nic:
-            ChannelFactoryInitialize(domain, nic)
-        else:
-            ChannelFactoryInitialize(domain)
+        # Join the domain already created by rclpy.init() (see patch above).
+        ChannelFactory().Init(domain, nic)
 
         self._latest: Optional[LowState_] = None
         self._sub = ChannelSubscriber('rt/lowstate', LowState_)
