@@ -79,6 +79,10 @@ RUN rosdep init || true && rosdep update
 #
 # Note: librealsense2-dkms is intentionally excluded (host kernel module,
 # meaningless inside a container).
+#
+# ros-humble-image-transport-plugins provides the compressed_image_transport
+# publisher. Without it realsense2_camera publishes only raw image_raw, so the
+# .../color/image_raw/compressed topic that comm_bridge relays never exists.
 # -----------------------------------------------------------------------------
 RUN mkdir -p /etc/apt/keyrings && \
     gpg --keyserver keyserver.ubuntu.com --recv-keys FB0B24895113F120 && \
@@ -91,6 +95,7 @@ RUN mkdir -p /etc/apt/keyrings && \
         ros-humble-realsense2-camera \
         ros-humble-realsense2-description \
         ros-humble-cv-bridge \
+        ros-humble-image-transport-plugins \
         python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
