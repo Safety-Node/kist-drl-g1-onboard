@@ -69,3 +69,12 @@ uwb_node:
 
     # Frame conventions
     frame_id: "map"
+
+# [TASK-50] G1 SDK odometry relay (REQ-42).
+# Subscribes to /dog_odom (G1 locomotion controller, nav_msgs/Odometry)
+# and republishes on /onboard/sensors/odom for comm_bridge relay.
+odom_node:
+  ros__parameters:
+    source_topic: "/dog_odom"
+    frame_id: "odom"
+    child_frame_id: "robot_center"
