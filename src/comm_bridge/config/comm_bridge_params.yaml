@@ -33,7 +33,7 @@ outbound_relay:
         dst:  "/bridge/sensors/color/compressed"
         type: "sensor_msgs/msg/CompressedImage"
         qos:  "best_effort"
-      - src:  "/onboard/sensors/camera/depth/image_raw"
+      - src:  "/onboard/sensors/camera/aligned_depth_to_color/image_raw"
         dst:  "/bridge/sensors/depth/image_raw"
         type: "sensor_msgs/msg/Image"
         qos:  "best_effort"
