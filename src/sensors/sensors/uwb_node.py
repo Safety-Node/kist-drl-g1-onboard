@@ -88,12 +88,11 @@ class StubTransport(UwbTransport):
 class SerialTransport(UwbTransport):
     """DWM UART shell — lec streaming, POS line parser.
 
-    Runs a background reader thread that reconnects on serial errors
-    with exponential backoff (max 16 s).
+    The port is opened **once** and kept open for the lifetime of the node.
+    Closing and re-opening causes DTR to toggle, which resets the DWM MCU
+    (J-Link OB behaviour). Only a true OSError (physical disconnect) triggers
+    a full re-open after waiting for the device node to reappear.
     """
-
-    _RECONNECT_BASE_S = 1.0
-    _RECONNECT_MAX_S = 16.0
 
     def __init__(self, port: str, baud: int) -> None:
         self._port = port
@@ -127,28 +126,35 @@ class SerialTransport(UwbTransport):
     # Internal helpers
     # ------------------------------------------------------------------
     def _reader_loop(self) -> None:
-        """Outer reconnect loop — retries with backoff on any error."""
-        import serial  # import here so stub/udp paths don't require pyserial
+        """Outer loop — open port once, re-open only on physical disconnect."""
+        import serial
 
-        backoff = self._RECONNECT_BASE_S
         while self._running:
             ser = None
             try:
-                ser = serial.Serial(
-                    self._port, self._baud, timeout=0.2,
-                )
+                ser = serial.Serial(self._port, self._baud, timeout=0.2)
                 time.sleep(0.3)
-                self._init_streaming(ser)
-                backoff = self._RECONNECT_BASE_S  # reset on success
+
+                buf = bytearray()
+                n = int(getattr(ser, "in_waiting", 0) or 0)
+                if n > 0:
+                    buf.extend(ser.read(n))
+
+                if b"DIST" in buf or b"POS" in buf:
+                    pass  # lec already streaming
+                elif b"dwm>" in buf:
+                    self._start_lec(ser)
+                else:
+                    self._enter_shell(ser)
+                    self._start_lec(ser)
+
                 self._read_loop(ser)
+            except OSError as exc:
+                print(f"UwbSerial: OSError ({exc}), retrying in 2s...", flush=True)
+                time.sleep(2.0)
             except Exception as exc:
-                if self._running:
-                    import logging
-                    logging.warning(
-                        "UwbSerial: error (%s), reconnecting in %.1fs", exc, backoff
-                    )
-                    time.sleep(backoff)
-                    backoff = min(backoff * 2, self._RECONNECT_MAX_S)
+                print(f"UwbSerial: error ({exc}), retrying...", flush=True)
+                time.sleep(1.0)
             finally:
                 if ser is not None:
                     try:
@@ -157,10 +163,13 @@ class SerialTransport(UwbTransport):
                         pass
 
     def _read_loop(self, ser) -> None:
-        """Inner read loop — exits on serial error or stop()."""
+        """Inner read loop — exits on OSError (physical disconnect) or stop()."""
         buf = bytearray()
         while self._running:
-            n = int(getattr(ser, "in_waiting", 0) or 0)
+            try:
+                n = int(getattr(ser, "in_waiting", 0) or 0)
+            except OSError:
+                raise
             if n > 0:
                 buf.extend(ser.read(n))
                 for line in self._extract_lines(buf):
@@ -171,56 +180,35 @@ class SerialTransport(UwbTransport):
             else:
                 time.sleep(0.005)
 
-    def _init_streaming(self, ser) -> None:
-        """Enter DWM shell and start lec mode."""
-        self._enter_shell(ser)
-        self._start_lec(ser)
-
-    def _enter_shell(self, ser, timeout: float = 6.0) -> None:
-        ser.reset_output_buffer()
+    def _enter_shell(self, ser, timeout: float = 3.0) -> None:
+        """Send \\r\\r and wait for dwm> prompt."""
+        ser.write(b"\r")
+        ser.flush()
+        time.sleep(0.1)
+        ser.write(b"\r")
+        ser.flush()
 
         buf = bytearray()
         deadline = time.monotonic() + timeout
-        last_cr = time.monotonic() - 1.0  # trigger immediate first CR
 
         while time.monotonic() < deadline:
-            # Periodically nudge with CR so DWM responds at any boot stage
-            if time.monotonic() - last_cr >= 0.5:
-                try:
-                    ser.write(b"\r")
-                    ser.flush()
-                except OSError:
-                    pass  # USB temporarily disconnected during DWM reset, retry
-                last_cr = time.monotonic()
-
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                try:
-                    buf.extend(ser.read(n))
-                except OSError:
-                    pass
+                buf.extend(ser.read(n))
                 if b"dwm>" in buf:
                     return
-                # Already in lec streaming — toggle off first
                 if b"DIST" in buf or b"POS" in buf:
                     buf.clear()
-                    try:
-                        ser.write(b"lec\r")
-                        ser.flush()
-                    except OSError:
-                        pass
-                    time.sleep(0.3)
-                    buf.clear()
-                    last_cr = time.monotonic() - 1.0  # force CR soon
-                    deadline = time.monotonic() + timeout
+                    ser.write(b"lec\r")
+                    ser.flush()
+                    time.sleep(0.1)
             else:
                 time.sleep(0.01)
 
-        print(f"UwbSerial: _enter_shell timeout, received: {bytes(buf)!r}", flush=True)
-        raise RuntimeError(f"UwbSerial: failed to enter DWM shell on {self._port}")
+        raise RuntimeError("UwbSerial: failed to enter DWM shell")
 
-    def _start_lec(self, ser, timeout: float = 2.0) -> None:
-        ser.reset_input_buffer()
+    def _start_lec(self, ser, timeout: float = 3.0) -> None:
+        """Send ``lec`` and wait for first data line or ``dwm>`` echo."""
         ser.write(b"lec\r")
         ser.flush()
 
@@ -229,9 +217,11 @@ class SerialTransport(UwbTransport):
         while time.monotonic() < deadline:
             n = int(getattr(ser, "in_waiting", 0) or 0)
             if n > 0:
-                buf.extend(ser.read(n))
+                chunk = ser.read(n)
+                buf.extend(chunk)
+                print(f"UwbSerial: lec rx {chunk!r}", flush=True)
                 if b"DIST" in buf or b"POS" in buf or b"dwm>" in buf:
-                    return  # accepted (no anchors = dwm> is ok)
+                    return
             else:
                 time.sleep(0.01)
         raise RuntimeError("UwbSerial: lec command not acknowledged")
