@@ -16,7 +16,7 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'pyserial'],
     zip_safe=True,
     maintainer='박성용',
     maintainer_email='park50260@gmail.com',
@@ -30,6 +30,7 @@ setup(
             'joint_state_node = sensors.joint_state_node:main',
             'imu_node         = sensors.imu_node:main',
             'uwb_node         = sensors.uwb_node:main',
+            'odom_node        = sensors.odom_node:main',
         ],
     },
 )

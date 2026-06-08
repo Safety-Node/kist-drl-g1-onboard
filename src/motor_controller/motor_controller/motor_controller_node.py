@@ -34,14 +34,14 @@ G1 SDK targets:
   overrun thresholds rerated against the 10 ms period (linspace(0,1,N) ramp
   count doubles to preserve ~2.0 s envelope).
 
-2026-05-26 KIST 회의 (workstation CONV-012, partly reverses 2026-05-22):
+2026-05-26 KIST 회의 (partly reverses 2026-05-22):
 - velocity_buf restored (5/26). PC NavigationProvider 발행 Twist 를
   velocity_buf 에 enqueue, 100 Hz loop 가 pop 해서
   LocoClient.Move(vx, vy, vyaw) 호출. Walking 은 PC NavigationProvider
   (Unitree SDK loco_client) 가 처리하며 더 이상 low-level VLA 가 아니다.
-  VELOCITY_CMD 디스패치 모드 부활. CONV-005 범위 축소 (arm/hand only).
+  VELOCITY_CMD 디스패치 모드 부활. VLA 범위 축소 (arm/hand only).
 
-2026-05-26 wire reversal (CONV-006 REVISED — workstation repo):
+2026-05-26 wire reversal (workstation repo):
 - /bridge/cmd/{arm,low} now carries JointCmdChunk (not single-step JointCmd).
   Chunk-handling responsibility moves from PC to here. The PC publishes a
   full action_horizon-step chunk per inference (~15 Hz); this node unpacks
@@ -59,7 +59,7 @@ G1 SDK targets:
 Traps:
 - estop_loco_action is a yaml string → method name. Validate with hasattr at
   startup; a typo otherwise blows up only on the first E-STOP.
-- crossfade is CANONICAL here (CONV-006 REVISED 2026-05-26). The yaml knobs
+- crossfade is CANONICAL here (2026-05-26 wire reversal). The yaml knobs
   chunk_size / crossfade_threshold_g previously labelled "fallback path" are
   now the live config for the canonical path — re-validate defaults when
   wiring.
@@ -91,7 +91,7 @@ import rclpy
 from rclpy.node import Node
 
 from .action_queue import ActionQueue
-from .queue_aggregate import crossfade  # noqa: F401  (canonical chunk crossfade; CONV-006 REVISED)
+from .queue_aggregate import crossfade  # noqa: F401  (canonical chunk crossfade)
 
 
 class MotorControllerNode(Node):

@@ -27,18 +27,26 @@ export DDS_PEER_IP=${DDS_PEER_IP:-192.168.123.222}
 
 declare -a PIDS=()
 
+# Kill any leftover node processes from a previous run.
+pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller" 2>/dev/null || true
+sleep 0.5
+
 cleanup() {
   echo "[run_onboard.sh] stopping…"
   for pid in "${PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
+    # Kill the launch process and its entire process group
+    kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
   done
+  # Wait a moment then force-kill any stragglers
+  sleep 1
+  pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-ros2 launch sensors           sensors.launch.py           & PIDS+=( $! )
-ros2 launch comm_bridge       comm_bridge.launch.py       & PIDS+=( $! )
-ros2 launch safety_monitor    safety_monitor.launch.py    & PIDS+=( $! )
-ros2 launch motor_controller  motor_controller.launch.py  & PIDS+=( $! )
+setsid ros2 launch sensors           sensors.launch.py           & PIDS+=( $! )
+setsid ros2 launch comm_bridge       comm_bridge.launch.py       & PIDS+=( $! )
+setsid ros2 launch safety_monitor    safety_monitor.launch.py    & PIDS+=( $! )
+setsid ros2 launch motor_controller  motor_controller.launch.py  & PIDS+=( $! )
 
 echo "[run_onboard.sh] launched PIDs: ${PIDS[*]}"
 wait
