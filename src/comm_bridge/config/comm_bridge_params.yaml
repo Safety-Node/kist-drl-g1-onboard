@@ -65,6 +65,10 @@ outbound_relay:
         dst:  "/bridge/sensors/odom"
         type: "nav_msgs/msg/Odometry"
         qos:  "best_effort"
+      - src:  "/onboard/sensors/location"
+        dst:  "/bridge/sensors/location"
+        type: "geometry_msgs/msg/PoseStamped"
+        qos:  "best_effort"
 
       # ---------- State reports (RELIABLE — don't drop transitions) ----------
       - src:  "/onboard/motor/buf_state"
