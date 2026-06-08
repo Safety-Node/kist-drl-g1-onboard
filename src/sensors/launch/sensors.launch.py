@@ -113,6 +113,7 @@ def generate_launch_description():
                 # Align depth to the color frame for fused color+depth use.
                 'align_depth.enable':         'true',
                 'pointcloud.enable':          'false',
+                'log_level':                  'error',  # hides benign power_line_frequency WARN (and all camera WARNs)
                 # TODO(REQ-42) [TASK-32]: tune QoS.
             }.items(),
         ))
