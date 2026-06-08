@@ -113,7 +113,6 @@ def generate_launch_description():
                 # Align depth to the color frame for fused color+depth use.
                 'align_depth.enable':         'true',
                 'pointcloud.enable':          'false',
-                'rgb_camera.power_line_frequency': '2',  # 60Hz (Korea); silences range [0,2] warning
                 # TODO(REQ-42) [TASK-32]: tune QoS.
             }.items(),
         ))
