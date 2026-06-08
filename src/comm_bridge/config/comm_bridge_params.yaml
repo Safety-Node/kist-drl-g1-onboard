@@ -29,11 +29,11 @@ outbound_relay:
     # /onboard/<src>  →  /bridge/<dst>
     relays:
       # ---------- Sensor streams (BEST_EFFORT — freshness wins) ----------
-      - src:  "/onboard/sensors/color/image_raw/compressed"
+      - src:  "/onboard/sensors/camera/color/image_raw/compressed"
         dst:  "/bridge/sensors/color/compressed"
         type: "sensor_msgs/msg/CompressedImage"
         qos:  "best_effort"
-      - src:  "/onboard/sensors/depth/image_raw"
+      - src:  "/onboard/sensors/camera/depth/image_raw"
         dst:  "/bridge/sensors/depth/image_raw"
         type: "sensor_msgs/msg/Image"
         qos:  "best_effort"

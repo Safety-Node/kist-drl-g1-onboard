@@ -25,7 +25,7 @@ export DDS_PEER_IP=${DDS_PEER_IP:-192.168.123.222}
 declare -a PIDS=()
 
 # Kill any leftover node processes from a previous run.
-pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller" 2>/dev/null || true
+pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller\|realsense2_camera\|rs_launch" 2>/dev/null || true
 sleep 0.5
 
 cleanup() {
@@ -36,7 +36,7 @@ cleanup() {
   done
   # Wait a moment then force-kill any stragglers
   sleep 1
-  pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller" 2>/dev/null || true
+  pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller\|realsense2_camera\|rs_launch" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
