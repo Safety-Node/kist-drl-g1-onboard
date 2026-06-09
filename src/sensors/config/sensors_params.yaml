@@ -23,14 +23,45 @@ speaker_node:
     channels: 1                   # mono
     max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
-# [TASK-37] G1 SDK lowstate → JointState publisher.
-# 2026-05-23 refactor: base IMU moved out (now in imu_node). This node only
-# owns /onboard/sensors/joint_states.
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
-    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
-    domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
+    domain_id: 0                  # must match ROS domain (SDK joins it); domain 0 shared by design
+    joint_names:
+      # Left leg (0-5)
+      - left_hip_pitch        # 0
+      - left_hip_roll         # 1
+      - left_hip_yaw          # 2
+      - left_knee             # 3
+      - left_ankle_pitch      # 4   (= left_ankle_b in AB mode)
+      - left_ankle_roll       # 5   (= left_ankle_a in AB mode)
+      # Right leg (6-11)
+      - right_hip_pitch       # 6
+      - right_hip_roll        # 7
+      - right_hip_yaw         # 8
+      - right_knee            # 9
+      - right_ankle_pitch     # 10  (= right_ankle_b)
+      - right_ankle_roll      # 11  (= right_ankle_a)
+      # Waist (12-14)
+      - waist_yaw             # 12
+      - waist_roll            # 13  (locked on 29-DoF/23-DoF)
+      - waist_pitch           # 14  (locked on 29-DoF/23-DoF)
+      # Left arm (15-21)
+      - left_shoulder_pitch   # 15
+      - left_shoulder_roll    # 16
+      - left_shoulder_yaw     # 17
+      - left_elbow            # 18
+      - left_wrist_roll       # 19
+      - left_wrist_pitch      # 20  (locked on 23-DoF)
+      - left_wrist_yaw        # 21  (locked on 23-DoF)
+      # Right arm (22-28)
+      - right_shoulder_pitch  # 22
+      - right_shoulder_roll   # 23
+      - right_shoulder_yaw    # 24
+      - right_elbow           # 25
+      - right_wrist_roll      # 26
+      - right_wrist_pitch     # 27  (locked on 23-DoF)
+      - right_wrist_yaw       # 28  (locked on 23-DoF)
 
 # [TASK-38] IMU streaming — base + ankle L/R (single owner since 2026-05-23 refactor;
 # reverses 2026-05-15 fan-out via joint_state_node).
@@ -42,7 +73,6 @@ imu_node:
     imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
-    network_interface: "eth0"   # NX↔G1 LAN interface (same as joint_state_node)
     domain_id: 0                # G1 SDK DDS domain (isolated from ROS 2 bridge domain)
     # Ankle IMU source TBD (REQ-42). Placeholder published until KIST/SDK confirms
     # whether G1 exposes ankle IMU natively or requires FK derivation.
