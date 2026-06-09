@@ -13,8 +13,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 if [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then
+  # ROS setup references unset vars (AMENT_TRACE_SETUP_FILES)
+  set +u
   # shellcheck disable=SC1090
   source "/opt/ros/${ROS_DISTRO}/setup.bash"
+  set -u
 else
   echo "[build.sh] WARNING: /opt/ros/${ROS_DISTRO}/setup.bash not found." >&2
   echo "[build.sh] Set ROS_DISTRO=<your-distro> or install ROS 2." >&2

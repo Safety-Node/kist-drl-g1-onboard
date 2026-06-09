@@ -30,6 +30,8 @@ setup(
             'joint_state_node = sensors.joint_state_node:main',
             'imu_node         = sensors.imu_node:main',
             'uwb_node         = sensors.uwb_node:main',
+            'odom_node        = sensors.odom_node:main',
+            'location_node    = sensors.location_node:main',
         ],
     },
 )

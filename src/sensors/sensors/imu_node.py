@@ -88,18 +88,16 @@ class ImuNode(Node):
         self.declare_parameter('imu_base_frame_id', 'base_link')
         self.declare_parameter('imu_ankle_left_frame_id', 'ankle_left_link')
         self.declare_parameter('imu_ankle_right_frame_id', 'ankle_right_link')
-        self.declare_parameter('network_interface', 'eth0')
         self.declare_parameter('domain_id', 0)
 
         rate_hz: int = self.get_parameter('publish_rate_hz').value
         self._frame_base: str = self.get_parameter('imu_base_frame_id').value
         self._frame_ankle_l: str = self.get_parameter('imu_ankle_left_frame_id').value
         self._frame_ankle_r: str = self.get_parameter('imu_ankle_right_frame_id').value
-        network_iface: str = self.get_parameter('network_interface').value
         domain_id: int = self.get_parameter('domain_id').value
 
         # SDK init — joins the domain already created by rclpy.init()
-        ChannelFactory().Init(domain_id, network_iface)
+        ChannelFactory().Init(domain_id)
 
         # Publishers
         self._pub_base = self.create_publisher(
@@ -121,7 +119,7 @@ class ImuNode(Node):
         self._timer = self.create_timer(period, self._publish)
 
         self.get_logger().info(
-            f'imu_node ready — {rate_hz} Hz, iface={network_iface}, domain={domain_id}')
+            f'imu_node ready — {rate_hz} Hz, domain={domain_id}')
 
     # ------------------------------------------------------------------ #
     # SDK callback                                                         #
