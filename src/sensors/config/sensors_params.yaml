@@ -15,7 +15,7 @@ mic_node:
     recv_buf_bytes: 65536
     socket_timeout_sec: 5.0       # recv timeout; logs hint (not fatal) if no packets
 
-# [TASK-31] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
+# [TASK-36] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
 # Playback is via Unitree SDK AudioClient (not ALSA) — PCM is sent to the robot
 # audio service on PC1 over the internal LAN. 16 kHz / 16-bit / mono is LOCKED in
 # code (AudioPCM.msg), so it is not a runtime param here.
