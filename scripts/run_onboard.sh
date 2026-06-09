@@ -10,13 +10,10 @@ ROS_DISTRO=${ROS_DISTRO:-humble}
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# ROS / overlay setup references unset vars (AMENT_TRACE_SETUP_FILES)
-set +u
 # shellcheck disable=SC1090
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
 # shellcheck disable=SC1091
 source "${REPO_ROOT}/install/setup.bash"
-set -u
 
 # Apply CycloneDDS config (partition filtering for /onboard/* topics).
 export CYCLONEDDS_URI="file://${REPO_ROOT}/config/cyclonedds.xml"
