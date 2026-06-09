@@ -29,6 +29,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
+from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 
@@ -81,8 +82,12 @@ class LocationNode(Node):
 
         self._ekf = UwbOdomAEKF()
         self._latest_odom_yaw: float = 0.0
+        self._uwb_samples: int = 0
 
         self._pub = self.create_publisher(PoseStamped, '/onboard/sensors/location', _BE_QOS)
+        self._pub_diag = self.create_publisher(
+            DiagnosticStatus, '/onboard/sensors/location/diagnostics', _BE_QOS
+        )
 
         self._sub_odom = self.create_subscription(Odometry, odom_topic, self._on_odom, _SUB_QOS)
         self._sub_uwb = self.create_subscription(PoseStamped, uwb_topic, self._on_uwb, _SUB_QOS)
@@ -117,15 +122,35 @@ class LocationNode(Node):
             return
 
         self._ekf.update(uwb_x, uwb_y)
+        self._uwb_samples += 1
 
     def _on_timer(self) -> None:
         if not self._ekf.initialized:
             return
 
-        if not self._ekf.yaw_calibrated:
+        now = self.get_clock().now().to_msg()
+        calibrated = self._ekf.yaw_calibrated
+        yaw_deg = math.degrees(self._ekf.global_yaw_rad)
+
+        # diagnostics — always published after EKF init
+        diag = DiagnosticStatus()
+        diag.level = DiagnosticStatus.OK if calibrated else DiagnosticStatus.WARN
+        diag.name = 'location_node'
+        diag.message = 'yaw calibrated' if calibrated else 'calibrating — move robot'
+        diag.values = [
+            KeyValue(key='std_bias_deg',   value=f'{self._ekf.std_bias_deg:.3f}'),
+            KeyValue(key='yaw_calibrated', value=str(calibrated)),
+            KeyValue(key='ekf_x',          value=f'{self._ekf.x_m:.4f}'),
+            KeyValue(key='ekf_y',          value=f'{self._ekf.y_m:.4f}'),
+            KeyValue(key='ekf_yaw_deg',    value=f'{yaw_deg:.2f}'),
+            KeyValue(key='uwb_samples',    value=str(self._uwb_samples)),
+        ]
+        self._pub_diag.publish(diag)
+
+        # location — only when calibrated
+        if not calibrated:
             return
 
-        now = self.get_clock().now().to_msg()
         qx, qy, qz, qw = _yaw_to_quat(self._ekf.global_yaw_rad)
 
         msg = PoseStamped()
