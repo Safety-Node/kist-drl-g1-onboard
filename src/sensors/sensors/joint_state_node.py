@@ -91,17 +91,15 @@ class JointStateNode(Node):
         self.declare_parameter('publish_rate_hz', 100)
         self.declare_parameter(
             'joint_names', [f'joint_{i}' for i in range(29)])
-        self.declare_parameter('network_interface', '')
         self.declare_parameter('domain_id', 0)
 
         rate = float(self.get_parameter('publish_rate_hz').value)
         self._joint_names: List[str] = [
             str(n) for n in self.get_parameter('joint_names').value]
-        nic = str(self.get_parameter('network_interface').value)
         domain = int(self.get_parameter('domain_id').value)
 
         # Join the domain already created by rclpy.init() (see patch above).
-        ChannelFactory().Init(domain, nic)
+        ChannelFactory().Init(domain)
 
         self._latest: Optional[LowState_] = None
         self._sub = ChannelSubscriber('rt/lowstate', LowState_)
