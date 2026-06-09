@@ -177,6 +177,15 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
+    # [TASK-51]
+    location_node = Node(
+        package='sensors',
+        executable='location_node',
+        name='location_node',
+        output='screen',
+        parameters=[params_file],
+    )
+
     return LaunchDescription([
         *external_nodes,
         mic_node,
@@ -185,4 +194,5 @@ def generate_launch_description():
         imu_node,
         uwb_node,
         odom_node,
+        location_node,
     ])
