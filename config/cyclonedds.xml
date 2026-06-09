@@ -4,31 +4,6 @@
             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
 
   <!--
-    Domain 0: NX-internal only.
-    All /onboard/* nodes (sensors, motor_controller, safety_monitor) run here.
-    Loopback interface only — domain-0 traffic never leaves the container.
-  -->
-  <Domain Id="0">
-    <General>
-      <Interfaces>
-        <NetworkInterface name="lo" priority="default" multicast="false"/>
-      </Interfaces>
-      <AllowMulticast>false</AllowMulticast>
-    </General>
-    <Discovery>
-      <Peers>
-        <Peer address="localhost"/>
-      </Peers>
-      <ParticipantIndex>auto</ParticipantIndex>
-      <MaxAutoParticipantIndex>20</MaxAutoParticipantIndex>
-    </Discovery>
-    <Tracing>
-      <Verbosity>warning</Verbosity>
-      <OutputFile>stderr</OutputFile>
-    </Tracing>
-  </Domain>
-
-  <!--
     Domain 1: Bridge domain shared with the workstation PC.
     outbound_relay and inbound_relay publish/subscribe here to exchange
     /bridge/* topics with the PC. eth0 + loopback so relay nodes on the

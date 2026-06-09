@@ -2,12 +2,18 @@
 # TODO(REQ-42): fill real values once HW driver wrappers are integrated.
 
 # [TASK-31] mic capture (Onboard → STT). LOCKED 16 kHz / 16-bit / mono pipeline.
+# Source is UDP multicast from the robot audio service (PC1), NOT a local ALSA
+# device (G1 4-mic array is owned by the robot — see g1_data_transport_차이).
 mic_node:
   ros__parameters:
-    capture_device: "default"     # TBD: e.g. "hw:CARD=Mic,DEV=0"
+    group_ip: "239.168.123.161"   # robot PC1 multicast group
+    port: 5555
+    iface_ip: "192.168.123.164"    # TBD: onboard NIC IP on 192.168.123.x (multicast join)
     sample_rate: 16000            # LOCKED — AudioPCM.msg pipeline format
     channels: 1                   # mono — intentional G1 4-mic mix-down (see TASK-31)
-    chunk_ms: 20                  # 20 ms chunk → ≈640 byte payload
+    chunk_ms: 20                  # re-packetise UDP payloads → 20 ms (640 byte) chunks
+    recv_buf_bytes: 65536
+    socket_timeout_sec: 5.0       # recv timeout; logs hint (not fatal) if no packets
 
 # [TASK-31] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
 # Playback is via Unitree SDK AudioClient (not ALSA) — PCM is sent to the robot
@@ -32,22 +38,16 @@ joint_state_node:
 # reverses 2026-05-15 fan-out via joint_state_node).
 # Base IMU from G1 SDK lowstate (own subscription, parallel to joint_state_node).
 # Ankle IMU source TBD; placeholder publish until KIST/SDK confirms channel.
-# Ankle placeholder messages carry orientation_covariance[0] = -1 (REP 145:
-# measurement unavailable) — GearSonic consumers must check before trusting.
 imu_node:
   ros__parameters:
     publish_rate_hz: 100
     imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
-    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface (mirrors joint_state_node)
-    domain_id: 0                  # TBD: pin to SDK-specific domain (mirrors joint_state_node)
-    # NOTE: network_interface + domain_id are read by main() BEFORE rclpy.init()
-    # (SDK init must precede ROS init). These params are informational mirrors only.
-    # TBD: real ankle IMU source. lowstate is consumed by both joint_state_node
-    # and this node (DDS multi-subscriber, negligible cost); check whether G1
-    # SDK exposes ankle IMU on a separate channel or if it must be derived
-    # (e.g. via FK from joint encoders + base IMU).
+    network_interface: "eth0"   # NX↔G1 LAN interface (same as joint_state_node)
+    domain_id: 0                # G1 SDK DDS domain (isolated from ROS 2 bridge domain)
+    # Ankle IMU source TBD (REQ-42). Placeholder published until KIST/SDK confirms
+    # whether G1 exposes ankle IMU natively or requires FK derivation.
 
 # [TASK-32] RealSense D435i — read by sensors.launch.py and passed as launch_arguments.
 camera_node:
@@ -61,21 +61,22 @@ camera_node:
     depth_height: 720
     depth_fps: 30
 
-# [TASK-30] UWB absolute pose (REQ-37). Vendor TBD — Strategy pattern UwbTransport ABC.
+# [TASK-30] UWB absolute pose (REQ-37). Decawave DWM series, DWM UART shell protocol.
 uwb_node:
   ros__parameters:
-    transport: "stub"             # "stub" | "serial" | "udp"  (stub returns zero pose)
-    serial_port: "/dev/ttyUSB0"   # TBD (when transport=="serial")
-    serial_baud: 115200           # TBD
-    udp_listen_port: 50000        # when transport=="udp"
-    publish_rate_hz: 20
+    transport: "serial"           # "stub" | "serial" | "udp"
+    serial_port: "/dev/uwb"       # udev symlink → /dev/ttyACM* (see config/99-uwb.rules)
+    serial_baud: 115200
+    publish_rate_hz: 10.0
 
     # Frame conventions
     frame_id: "map"
-    child_frame_id: "base_link"   # reserved — no TF broadcast (see TASK-30)
 
-    # Anchor calibration — TBD: site survey.
-    # Trilateration needs ≥ 3 non-collinear anchors. Placeholder paired with transport: "stub".
-    anchors:
-      # anchor_id: [x, y, z]  metres, map frame
-      placeholder_anchor_0: [0.0, 0.0, 2.5]
+# [TASK-50] G1 SDK odometry relay (REQ-42).
+# Subscribes to /dog_odom (G1 locomotion controller, nav_msgs/Odometry)
+# and republishes on /onboard/sensors/odom for comm_bridge relay.
+odom_node:
+  ros__parameters:
+    source_topic: "/dog_odom"
+    frame_id: "odom"
+    child_frame_id: "robot_center"

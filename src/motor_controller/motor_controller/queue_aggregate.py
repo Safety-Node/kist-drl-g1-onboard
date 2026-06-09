@@ -1,5 +1,5 @@
 """
-Canonical chunk crossfade for joint_buf (CONV-006 REVISED 2026-05-26).
+Canonical chunk crossfade for joint_buf (2026-05-26 wire reversal).
 
 Linear blend over the overlap region when a new VLA chunk arrives before
 the previous chunk drained:
