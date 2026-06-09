@@ -114,7 +114,7 @@ class JointStateNode(Node):
         self.get_logger().info(
             f'joint_state_node started (SDK rt/lowstate, {rate:.1f} Hz, '
             f'{len(self._joint_names)} joints, '
-            f'domain={domain}, nic={nic or "default"})')
+            f'domain={domain})')
 
     def _on_lowstate(self, msg: LowState_) -> None:
         self._latest = msg
