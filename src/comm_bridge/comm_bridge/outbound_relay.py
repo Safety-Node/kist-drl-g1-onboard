@@ -1,22 +1,27 @@
 """
-Outbound relay /onboard/* → /bridge/*.
+Outbound relay /onboard/* → /bridge/*  (domain 0 → domain 1).
 
-Bridges ROS 2 domain 0 (NX-internal /onboard/* topics) to domain 1 (bridge
-domain shared with the workstation /bridge/* topics).
+Domain layout:
+  domain 0 — NX-internal: all /onboard/* topics (sensors, motor, safety …)
+  domain 1 — Bridge domain: shared with workstation /bridge/* topics
 
-Subscriber nodes live on domain 0; publisher nodes live on domain 1.
-Each domain runs its own SingleThreadedExecutor in a separate thread so that
-neither blocks the other.  rcl_publish() is thread-safe, so subscriber
-callbacks on the domain-0 thread may call publish() on domain-1 publishers
-directly without a queue.
+Each relay entry subscribes on domain 0 and publishes on domain 1 so the
+workstation can see sensor data without being on the robot's internal domain.
+
+Executor: MultiThreadedExecutor on the domain-0 node so that large-message
+callbacks (e.g. 1.8 MB depth images at 30 Hz) do not block audio/IMU callbacks.
+Without this, a depth callback holding the executor for ~10-30 ms causes the
+depth=1 subscription queue for audio_pcm (50 Hz, 640 B) to overflow and drop
+roughly half the frames before the executor gets back to it.
+
+QoS "stream": BEST_EFFORT + depth=10 for continuous audio — absorbs brief
+scheduler jitter without accumulating stale frames (50 Hz drains the full queue
+in 200 ms). Large-image topics keep depth=1 ("freshness wins").
 
 Loads comm_bridge_params.yaml directly from the package share directory
 (yaml.safe_load). List-of-dict relay entries cannot be expressed as ROS 2
 parameters (rclpy raises InvalidParameterTypeException), so NO parameters=[]
 in the launch file — see comm_bridge.launch.py.
-
-Echo-loop guard: entries where src and dst share the same namespace prefix
-(both /onboard/ or both /bridge/) are rejected at load time.
 """
 import importlib
 import threading
@@ -25,18 +30,27 @@ import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from rclpy.context import Context
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 
-_DOMAIN_ONBOARD = 0  # NX-internal domain — /onboard/* topics
-_DOMAIN_BRIDGE = 1   # Bridge domain — /bridge/* topics (shared with PC)
+_DOMAIN_ONBOARD = 0  # NX-internal — /onboard/* topics
+_DOMAIN_BRIDGE = 1   # shared with workstation — /bridge/* topics
 
 _QOS_MAP = {
+    # Large sensor frames: always want the latest, never accumulate stale data.
     "best_effort": QoSProfile(
         reliability=ReliabilityPolicy.BEST_EFFORT,
         history=HistoryPolicy.KEEP_LAST,
         depth=1,
+    ),
+    # Continuous audio stream: needs delivery continuity, not just freshness.
+    # depth=10 absorbs brief executor-scheduling jitter without accumulating
+    # stale frames (audio at 50 Hz drains the queue in 200 ms even when full).
+    "stream": QoSProfile(
+        reliability=ReliabilityPolicy.BEST_EFFORT,
+        history=HistoryPolicy.KEEP_LAST,
+        depth=10,
     ),
     "reliable": QoSProfile(
         reliability=ReliabilityPolicy.RELIABLE,
@@ -62,21 +76,15 @@ def _load_relays(yaml_path: str) -> list:
     return doc.get("outbound_relay", {}).get("ros__parameters", {}).get("relays", [])
 
 
-def _is_echo_loop(src: str, dst: str) -> bool:
-    """Return True if src and dst share the same top-level namespace prefix."""
-    for prefix in ("/onboard/", "/bridge/"):
-        if src.startswith(prefix) and dst.startswith(prefix):
-            return True
-    return False
-
-
 def main(args=None) -> None:
     ctx_onboard = Context()
     ctx_bridge = Context()
     rclpy.init(context=ctx_onboard, args=args, domain_id=_DOMAIN_ONBOARD)
     rclpy.init(context=ctx_bridge, args=[], domain_id=_DOMAIN_BRIDGE)
 
+    # domain-0 node: subscribes /onboard/* topics
     node_onboard = Node("outbound_relay_onboard", context=ctx_onboard)
+    # domain-1 node: publishes /bridge/* topics visible to workstation
     node_bridge = Node("outbound_relay_bridge", context=ctx_bridge)
     logger = node_onboard.get_logger()
 
@@ -103,12 +111,6 @@ def main(args=None) -> None:
         type_str = entry["type"]
         qos_key = entry.get("qos", "best_effort")
 
-        if _is_echo_loop(src, dst):
-            logger.error(
-                f"Echo-loop detected: {src} → {dst} share same prefix — skipping"
-            )
-            continue
-
         try:
             msg_cls = _load_msg_class(type_str)
         except Exception as e:
@@ -120,6 +122,7 @@ def main(args=None) -> None:
             logger.warn(f"Unknown qos {qos_key!r} for {src} — falling back to best_effort")
             qos = _QOS_MAP["best_effort"]
 
+        # publisher lives on domain 1 (workstation-visible)
         pub = node_bridge.create_publisher(msg_cls, dst, qos)
 
         def _make_cb(p):
@@ -127,6 +130,7 @@ def main(args=None) -> None:
                 p.publish(msg)
             return _cb
 
+        # subscriber lives on domain 0 (onboard-internal)
         sub = node_onboard.create_subscription(msg_cls, src, _make_cb(pub), qos)
         _refs.append((sub, pub))
         logger.info(f"relay  {src}  →  {dst}  [{qos_key}]")
@@ -137,14 +141,16 @@ def main(args=None) -> None:
         f" (domain {_DOMAIN_ONBOARD} → {_DOMAIN_BRIDGE})"
     )
 
-    exec_onboard = SingleThreadedExecutor(context=ctx_onboard)
-    exec_bridge = SingleThreadedExecutor(context=ctx_bridge)
-    exec_onboard.add_node(node_onboard)
+    # domain-1 publisher node runs in a background thread (publish-only, lightweight)
+    exec_bridge = MultiThreadedExecutor(context=ctx_bridge)
     exec_bridge.add_node(node_bridge)
-
     t_bridge = threading.Thread(target=exec_bridge.spin, daemon=True, name="exec_bridge")
     t_bridge.start()
 
+    # domain-0 subscriber node uses MultiThreadedExecutor so depth-image callbacks
+    # don't block audio/IMU callbacks
+    exec_onboard = MultiThreadedExecutor(context=ctx_onboard)
+    exec_onboard.add_node(node_onboard)
     try:
         exec_onboard.spin()
     except KeyboardInterrupt:
