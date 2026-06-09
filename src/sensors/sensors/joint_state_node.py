@@ -8,9 +8,10 @@ the ankle IMU topics — see REQ-42 v2026-05-23. Both nodes subscribe to
 G1 SDK lowstate independently; the DDS multi-subscriber cost is
 negligible at the SDK lowstate rate.
 
-Trap: G1 SDK opens its own DDS participant. If sharing ROS 2 domain_id, raw G1
-      channels (rt/lf/lowstate, rt/lowcmd, rt/arm_sdk) leak into ros2 topic list.
-      Pin sensors_params.yaml domain_id to a separate value (see TASK-32).
+Domain: SDK shares ROS 2 domain 0 — _patch_channel_factory() joins the domain
+        rclpy already created, so domain_id MUST match the ROS domain. Raw G1
+        channels (rt/lf/lowstate, ...) stay visible in ros2 topic list on the NX
+        by design; comm_bridge gates the workstation (domain-id-strategy).
 
 Source: unitree_sdk2py ChannelSubscriber on 'rt/lowstate' (unitree_hg.LowState_).
         Callback runs in the SDK thread; the ROS timer publishes the latest

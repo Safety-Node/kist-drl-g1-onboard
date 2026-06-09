@@ -26,8 +26,8 @@ speaker_node:
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
-    network_interface: "eno2"     # NX↔G1 LAN interface (confirmed)
-    domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
+    network_interface: "eno2"     # ignored: ChannelFactory patch uses CYCLONEDDS_URI, not this nic
+    domain_id: 0                  # must match ROS domain (SDK joins it); domain 0 shared by design
     joint_names:
       # Left leg (0-5)
       - left_hip_pitch        # 0
