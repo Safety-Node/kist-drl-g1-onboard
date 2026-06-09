@@ -26,7 +26,10 @@ declare -a PIDS=()
 
 # Kill any leftover node processes from a previous run.
 pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller\|realsense2_camera\|rs_launch" 2>/dev/null || true
-sleep 0.5
+# RealSense holds the USB device; force-kill stragglers and let the kernel
+# release it, else the next launch hits "VIDIOC_S_FMT ... Device busy" (errno 16).
+pkill -9 -f "realsense2_camera\|rs_launch" 2>/dev/null || true
+sleep 2
 
 cleanup() {
   echo "[run_onboard.sh] stopping…"
@@ -37,6 +40,8 @@ cleanup() {
   # Wait a moment then force-kill any stragglers
   sleep 1
   pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller\|realsense2_camera\|rs_launch" 2>/dev/null || true
+  # Force-kill RealSense so it releases the USB device for the next run.
+  pkill -9 -f "realsense2_camera\|rs_launch" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
