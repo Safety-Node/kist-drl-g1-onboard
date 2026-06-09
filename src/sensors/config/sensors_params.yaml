@@ -78,3 +78,12 @@ odom_node:
     source_topic: "/dog_odom"
     frame_id: "odom"
     child_frame_id: "robot_center"
+
+# [TASK-51] UWB + odom EKF 융합 위치 발행 (REQ-42, REQ-45).
+# /onboard/sensors/odom + /onboard/sensors/uwb/pose → EKF → /onboard/sensors/location
+location_node:
+  ros__parameters:
+    odom_topic: "/onboard/sensors/odom"
+    uwb_topic:  "/onboard/sensors/uwb/pose"
+    publish_hz: 20.0
+    frame_id:   "map"
