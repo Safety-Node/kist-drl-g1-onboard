@@ -8,10 +8,13 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS core imgcodecs)
 
 add_executable(camera_relay src/camera_relay_node.cpp)
 target_compile_features(camera_relay PUBLIC cxx_std_17)
 ament_target_dependencies(camera_relay rclcpp sensor_msgs)
+target_include_directories(camera_relay PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(camera_relay ${OpenCV_LIBS})
 
 install(TARGETS camera_relay DESTINATION lib/${PROJECT_NAME})
 
