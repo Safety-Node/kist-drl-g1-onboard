@@ -155,6 +155,8 @@ int main(int argc, char ** argv)
             }
             if (!msg) { continue; }
 
+            auto t0 = std::chrono::steady_clock::now();
+
             const int num_pixels = static_cast<int>(msg->width * msg->height);
             rvl_buf.resize(msg->data.size());
 
@@ -168,6 +170,13 @@ int main(int argc, char ** argv)
             out->format = "16UC1; compressedDepth rvl";
             out->data.assign(rvl_buf.begin(), rvl_buf.begin() + compressed_bytes);
             pub_depth->publish(std::move(out));
+
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t0).count();
+            if (ms > 20) {
+                RCLCPP_WARN(node_pub->get_logger(),
+                    "[RELAY] depth compress+publish slow: %ldms (rvl=%dB)", ms, compressed_bytes);
+            }
         }
     });
 
@@ -180,9 +189,19 @@ int main(int argc, char ** argv)
             color_cv.notify_one();
         });
 
+    // Diagnostic: detect whether gaps come from the source or from this relay.
+    auto last_depth_cb = std::make_shared<std::chrono::steady_clock::time_point>();
     auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
         "/onboard/sensors/camera/aligned_depth_to_color/image_raw", qos,
-        [&](sensor_msgs::msg::Image::UniquePtr msg) {
+        [&, last_depth_cb](sensor_msgs::msg::Image::UniquePtr msg) {
+            auto now = std::chrono::steady_clock::now();
+            auto gap_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - *last_depth_cb).count();
+            if (last_depth_cb->time_since_epoch().count() > 0 && gap_ms > 50) {
+                RCLCPP_WARN(node_sub->get_logger(),
+                    "[SOURCE] depth callback gap: %ldms", gap_ms);
+            }
+            *last_depth_cb = now;
             std::lock_guard<std::mutex> lk(depth_mtx);
             pending_depth = std::move(msg);
             depth_cv.notify_one();
