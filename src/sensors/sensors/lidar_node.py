@@ -1,105 +1,61 @@
 """
-Unitree G1 built-in LiDAR point cloud publisher.
+Unitree G1 built-in LiDAR point cloud relay.
 
-Subscribes to the robot's DDS topic rt/utlidar/cloud and republishes on
-/onboard/sensors/lidar/points as sensor_msgs/PointCloud2.
+G1의 Livox Mid-360 라이다는 /utlidar/cloud_livox_mid360 (sensor_msgs/PointCloud2,
+Reliable QoS)으로 발행된다. 이 노드는 해당 토픽을 구독해 표준 onboard 네임스페이스로
+재발행한다. odom_node와 동일한 relay 패턴.
 
 Publications:
-    /onboard/sensors/lidar/points  sensor_msgs/PointCloud2  BestEffort  ~10 Hz
-
-SDK / ROS 2 CycloneDDS coexistence
-------------------------------------
-unitree_sdk2py and rmw_cyclonedds_cpp share libddsc.so, so only one
-process can own domain 0.  _patch_channel_factory() replaces
-ChannelFactory.Init() with a version that skips Domain() creation and
-creates a DomainParticipant directly on the already-active domain.
-(Same approach as imu_node.)
+    /onboard/sensors/lidar/points  sensor_msgs/PointCloud2  BestEffort
 """
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.qos import (
+    QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy,
+    QoSDurabilityPolicy,
+)
 
-from sensor_msgs.msg import PointCloud2, PointField
-
-import unitree_sdk2py.core.channel as _sdk_ch
-from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
-from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
-
-
-def _patch_channel_factory() -> None:
-    """Replace ChannelFactory.Init to skip Domain() creation.
-
-    rmw_cyclonedds_cpp and unitree_sdk2py share libddsc.so.  Calling
-    Domain(0, config) after rclpy.init() raises DDSException because
-    domain 0 already exists.  We skip straight to DomainParticipant(),
-    which joins the already-active domain.
-    """
-    from cyclonedds.domain import DomainParticipant as _DDP
-
-    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
-        if self.__class__._ChannelFactory__initialized:
-            return True
-        with self.__class__._ChannelFactory__init_lock:
-            if self.__class__._ChannelFactory__initialized:
-                return True
-            try:
-                self.__class__._ChannelFactory__participant = _DDP(id)
-            except Exception:
-                return False
-            self.__class__._ChannelFactory__qos = qos
-            self.__class__._ChannelFactory__initialized = True
-            return True
-
-    _sdk_ch.ChannelFactory.Init = _init
+from sensor_msgs.msg import PointCloud2
 
 
-_patch_channel_factory()
+_BE_QOS = QoSProfile(
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=1,
+)
 
-_BEST_EFFORT_QOS = QoSProfile(
-    reliability=ReliabilityPolicy.BEST_EFFORT,
-    history=HistoryPolicy.KEEP_LAST,
+# /utlidar/cloud_livox_mid360 is published by Unitree internal driver with RELIABLE
+_SUB_QOS = QoSProfile(
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    history=QoSHistoryPolicy.KEEP_LAST,
+    durability=QoSDurabilityPolicy.VOLATILE,
     depth=1,
 )
 
 
 class LidarNode(Node):
+
     def __init__(self) -> None:
         super().__init__('lidar_node')
 
+        self.declare_parameter('source_topic', '/utlidar/cloud_livox_mid360')
         self.declare_parameter('frame_id', 'utlidar_lidar')
-        self.declare_parameter('domain_id', 0)
 
+        source = self.get_parameter('source_topic').value
         self._frame_id: str = self.get_parameter('frame_id').value
-        domain_id: int = self.get_parameter('domain_id').value
-
-        ChannelFactory().Init(domain_id)
 
         self._pub = self.create_publisher(
-            PointCloud2, '/onboard/sensors/lidar/points', _BEST_EFFORT_QOS)
+            PointCloud2, '/onboard/sensors/lidar/points', _BE_QOS)
 
-        self._sub = ChannelSubscriber('rt/utlidar/cloud', PointCloud2_)
-        self._sub.Init(self._on_cloud, 10)
+        self._sub = self.create_subscription(
+            PointCloud2, source, self._on_cloud, _SUB_QOS)
 
         self.get_logger().info(
-            f'lidar_node ready — domain={domain_id}, frame_id={self._frame_id}')
+            f'lidar_node ready — relay {source} → /onboard/sensors/lidar/points')
 
-    def _on_cloud(self, msg: PointCloud2_) -> None:
-        out = PointCloud2()
-        out.header.stamp.sec = msg.header.stamp.sec
-        out.header.stamp.nanosec = msg.header.stamp.nanosec
-        out.header.frame_id = self._frame_id
-        out.height = msg.height
-        out.width = msg.width
-        out.fields = [
-            PointField(name=f.name, offset=f.offset, datatype=f.datatype, count=f.count)
-            for f in msg.fields
-        ]
-        out.is_bigendian = msg.is_bigendian
-        out.point_step = msg.point_step
-        out.row_step = msg.row_step
-        out.data = bytes(msg.data)
-        out.is_dense = msg.is_dense
-        self._pub.publish(out)
+    def _on_cloud(self, msg: PointCloud2) -> None:
+        msg.header.frame_id = self._frame_id
+        self._pub.publish(msg)
 
 
 def main(args=None) -> None:
