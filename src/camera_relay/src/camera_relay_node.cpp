@@ -189,19 +189,37 @@ int main(int argc, char ** argv)
             color_cv.notify_one();
         });
 
-    // Diagnostic: detect whether gaps come from the source or from this relay.
-    auto last_depth_cb = std::make_shared<std::chrono::steady_clock::time_point>();
+    // Diagnostic: distinguish SDK frame drop vs DDS/ROS delivery lag.
+    //   stamp_gap  = header.stamp interval → camera SDK dropped a frame if > 50ms
+    //   wall_gap   = wall-clock callback interval → delivery lag if > stamp_gap
+    auto last_depth_stamp_ns = std::make_shared<int64_t>(0);
+    auto last_depth_cb       = std::make_shared<std::chrono::steady_clock::time_point>();
     auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
         "/onboard/sensors/camera/aligned_depth_to_color/image_raw", qos,
-        [&, last_depth_cb](sensor_msgs::msg::Image::UniquePtr msg) {
-            auto now = std::chrono::steady_clock::now();
-            auto gap_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                now - *last_depth_cb).count();
-            if (last_depth_cb->time_since_epoch().count() > 0 && gap_ms > 50) {
-                RCLCPP_WARN(node_sub->get_logger(),
-                    "[SOURCE] depth callback gap: %ldms", gap_ms);
+        [&, last_depth_stamp_ns, last_depth_cb](sensor_msgs::msg::Image::UniquePtr msg) {
+            auto now      = std::chrono::steady_clock::now();
+            int64_t stamp = rclcpp::Time(msg->header.stamp).nanoseconds();
+
+            if (*last_depth_stamp_ns > 0) {
+                double stamp_gap_ms = (stamp - *last_depth_stamp_ns) / 1e6;
+                double wall_gap_ms  = std::chrono::duration<double, std::milli>(
+                    now - *last_depth_cb).count();
+
+                if (stamp_gap_ms > 50.0) {
+                    RCLCPP_WARN(node_sub->get_logger(),
+                        "[SDK-DROP] depth stamp gap: %.0fms  wall: %.0fms  "
+                        "(camera dropped ~%.0f frames)",
+                        stamp_gap_ms, wall_gap_ms, stamp_gap_ms / 33.3 - 1.0);
+                } else if (wall_gap_ms > 50.0) {
+                    RCLCPP_WARN(node_sub->get_logger(),
+                        "[DDS-LAG]  depth stamp gap: %.0fms  wall: %.0fms  "
+                        "(delivery delayed, frames queued in DDS)",
+                        stamp_gap_ms, wall_gap_ms);
+                }
             }
-            *last_depth_cb = now;
+            *last_depth_stamp_ns = stamp;
+            *last_depth_cb       = now;
+
             std::lock_guard<std::mutex> lk(depth_mtx);
             pending_depth = std::move(msg);
             depth_cv.notify_one();
