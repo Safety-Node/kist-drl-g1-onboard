@@ -28,15 +28,8 @@ outbound_relay:
   ros__parameters:
     # /onboard/<src>  →  /bridge/<dst>
     relays:
-      # ---------- Camera frames (large — async-queued in relay) ----------
-      - src:  "/onboard/sensors/camera/color/image_raw/compressed"
-        dst:  "/bridge/sensors/color/compressed"
-        type: "sensor_msgs/msg/CompressedImage"
-      - src:  "/onboard/sensors/camera/aligned_depth_to_color/image_raw"
-        dst:  "/bridge/sensors/depth/image_raw"
-        type: "sensor_msgs/msg/Image"
-
       # ---------- Sensor streams (BEST_EFFORT — freshness wins) ----------
+      # Camera topics are handled by camera_relay (C++ node) — see camera_relay pkg.
       - src:  "/onboard/sensors/audio/pcm"
         dst:  "/bridge/sensors/audio_pcm"
         type: "g1_onboard_msgs/msg/AudioPCM"
