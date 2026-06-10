@@ -18,13 +18,13 @@ subscribers can be exercised end-to-end. covariance[0] = -1 signals
 
 SDK / ROS 2 CycloneDDS coexistence
 -----------------------------------
-unitree_sdk2py and rmw_cyclonedds_cpp share libddsc.so, so only one
-process can own domain 0.  _patch_channel_factory() replaces
-ChannelFactory.Init() with a version that skips Domain() creation and
-creates a DomainParticipant directly on the already-active domain.
-
-config/cyclonedds.xml Domain 0 uses eth0+multicast so the SDK participant
-can discover the robot via standard multicast discovery.
+unitree_sdk2py and rmw_cyclonedds_cpp share libddsc.so.  We create a second
+DomainParticipant on domain 0 (CycloneDDS supports multiple participants per
+domain per process) and poll the DataReader inside the existing timer callback
+instead of using ChannelSubscriber.  ChannelSubscriber's internal thread
+busy-polls the DDS reader with no sleep, consuming an entire CPU core even
+when no robot data arrives.  Polling in the timer adds zero threads and uses
+CPU only proportional to the publish rate.
 """
 import rclpy
 from rclpy.node import Node
@@ -34,39 +34,10 @@ from builtin_interfaces.msg import Time
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Header
 
-import unitree_sdk2py.core.channel as _sdk_ch
-from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
+from cyclonedds.domain import DomainParticipant
+from cyclonedds.topic import Topic
+from cyclonedds.sub import DataReader
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-
-
-def _patch_channel_factory() -> None:
-    """Replace ChannelFactory.Init to skip Domain() creation.
-
-    rmw_cyclonedds_cpp and unitree_sdk2py share libddsc.so.  Calling
-    Domain(0, config) after rclpy.init() raises DDSException because
-    domain 0 already exists.  We skip straight to DomainParticipant(),
-    which joins the already-active domain.
-    """
-    from cyclonedds.domain import DomainParticipant as _DDP
-
-    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
-        if self.__class__._ChannelFactory__initialized:
-            return True
-        with self.__class__._ChannelFactory__init_lock:
-            if self.__class__._ChannelFactory__initialized:
-                return True
-            try:
-                self.__class__._ChannelFactory__participant = _DDP(id)
-            except Exception:
-                return False
-            self.__class__._ChannelFactory__qos = qos
-            self.__class__._ChannelFactory__initialized = True
-            return True
-
-    _sdk_ch.ChannelFactory.Init = _init
-
-
-_patch_channel_factory()
 
 
 _BEST_EFFORT_QOS = QoSProfile(
@@ -96,8 +67,11 @@ class ImuNode(Node):
         self._frame_ankle_r: str = self.get_parameter('imu_ankle_right_frame_id').value
         domain_id: int = self.get_parameter('domain_id').value
 
-        # SDK init — joins the domain already created by rclpy.init()
-        ChannelFactory().Init(domain_id)
+        # CycloneDDS reader polled in the timer — no background thread.
+        _dp = DomainParticipant(domain_id)
+        _topic = Topic(_dp, 'rt/lowstate', LowState_)
+        self._dds_reader: DataReader = DataReader(_dp, _topic)
+        self._lowstate: LowState_ | None = None
 
         # Publishers
         self._pub_base = self.create_publisher(
@@ -107,13 +81,6 @@ class ImuNode(Node):
         self._pub_ankle_r = self.create_publisher(
             Imu, '/onboard/sensors/imu/ankle_right', _BEST_EFFORT_QOS)
 
-        # Latest lowstate — written by SDK callback, read by timer
-        self._lowstate: LowState_ | None = None
-
-        # G1 SDK lowstate subscriber (independent from joint_state_node)
-        self._sub = ChannelSubscriber('rt/lowstate', LowState_)
-        self._sub.Init(self._on_lowstate, 10)
-
         # Publish timer
         period = 1.0 / rate_hz
         self._timer = self.create_timer(period, self._publish)
@@ -121,18 +88,11 @@ class ImuNode(Node):
         self.get_logger().info(
             f'imu_node ready — {rate_hz} Hz, domain={domain_id}')
 
-    # ------------------------------------------------------------------ #
-    # SDK callback                                                         #
-    # ------------------------------------------------------------------ #
-
-    def _on_lowstate(self, msg: LowState_) -> None:
-        self._lowstate = msg
-
-    # ------------------------------------------------------------------ #
-    # Timer callback                                                       #
-    # ------------------------------------------------------------------ #
-
     def _publish(self) -> None:
+        samples = self._dds_reader.take(N=1)
+        if samples:
+            self._lowstate = samples[0]
+
         stamp = self.get_clock().now().to_msg()
         self._publish_base(stamp)
         self._publish_ankle_placeholder(stamp, self._pub_ankle_l, self._frame_ankle_l)
@@ -143,7 +103,6 @@ class ImuNode(Node):
         msg.header = Header(stamp=stamp, frame_id=self._frame_base)
 
         if self._lowstate is None:
-            # No SDK data yet — emit placeholder so topic is visible
             msg.orientation_covariance = list(_PLACEHOLDER_COV)
             msg.angular_velocity_covariance = list(_PLACEHOLDER_COV)
             msg.linear_acceleration_covariance = list(_PLACEHOLDER_COV)
