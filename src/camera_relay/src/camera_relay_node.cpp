@@ -180,14 +180,16 @@ int main(int argc, char ** argv)
         }
     });
 
+    // DIAG: color subscription temporarily disabled to isolate whether
+    // realsense2_camera's JPEG encoding blocks the depth alignment thread.
     // Both callbacks return immediately — executor is never stalled.
-    auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
-        "/onboard/sensors/camera/color/image_raw/compressed", qos,
-        [&](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
-            std::lock_guard<std::mutex> lk(color_mtx);
-            pending_color = std::move(msg);
-            color_cv.notify_one();
-        });
+    // auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
+    //     "/onboard/sensors/camera/color/image_raw/compressed", qos,
+    //     [&](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
+    //         std::lock_guard<std::mutex> lk(color_mtx);
+    //         pending_color = std::move(msg);
+    //         color_cv.notify_one();
+    //     });
 
     // Diagnostic: distinguish SDK frame drop vs DDS/ROS delivery lag.
     //   stamp_gap  = header.stamp interval → camera SDK dropped a frame if > 50ms
