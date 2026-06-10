@@ -67,14 +67,12 @@ class LidarNode(Node):
         super().__init__('lidar_node')
 
         self.declare_parameter('frame_id', 'utlidar_lidar')
-        self.declare_parameter('network_interface', 'eth0')
         self.declare_parameter('domain_id', 0)
 
         self._frame_id: str = self.get_parameter('frame_id').value
-        network_iface: str = self.get_parameter('network_interface').value
         domain_id: int = self.get_parameter('domain_id').value
 
-        ChannelFactory().Init(domain_id, network_iface)
+        ChannelFactory().Init(domain_id)
 
         self._pub = self.create_publisher(
             PointCloud2, '/onboard/sensors/lidar/points', _BEST_EFFORT_QOS)
@@ -83,8 +81,7 @@ class LidarNode(Node):
         self._sub.Init(self._on_cloud, 10)
 
         self.get_logger().info(
-            f'lidar_node ready — iface={network_iface}, domain={domain_id}, '
-            f'frame_id={self._frame_id}')
+            f'lidar_node ready — domain={domain_id}, frame_id={self._frame_id}')
 
     def _on_cloud(self, msg: PointCloud2_) -> None:
         out = PointCloud2()
