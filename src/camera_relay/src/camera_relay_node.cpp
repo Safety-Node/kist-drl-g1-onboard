@@ -2,31 +2,24 @@
  * camera_relay — C++ domain bridge for camera frames.
  *
  * Relays camera topics from domain 0 (onboard) to domain 1 (bridge).
- * C++ serialization handles 1.8 MB depth frames at 30 Hz without the
+ * C++ serialization handles compressed frames at 30 Hz without the
  * ~125 ms Python/rclpy CDR overhead that saturates a CPU core.
  *
  * Subscriptions  (domain 0, BEST_EFFORT depth=1):
  *   /onboard/sensors/camera/color/image_raw/compressed
- *   /onboard/sensors/camera/aligned_depth_to_color/image_raw
+ *   /onboard/sensors/camera/aligned_depth_to_color/image_raw/compressedDepth
  *
  * Publications   (domain 1, BEST_EFFORT depth=1):
  *   /bridge/sensors/color/compressed
- *   /bridge/sensors/depth/image_raw
- *
- * Depth is published from a dedicated thread so a slow domain-1 write
- * (e.g. no workstation connected → UDP retcode -3) never blocks the
- * executor and delays color callbacks.
+ *   /bridge/sensors/depth/compressedDepth
  */
 #include <atomic>
-#include <condition_variable>
 #include <csignal>
 #include <memory>
-#include <mutex>
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
-#include <sensor_msgs/msg/image.hpp>
 
 namespace {
 
@@ -73,44 +66,22 @@ int main(int argc, char ** argv)
 
     auto pub_color = node_pub->create_publisher<sensor_msgs::msg::CompressedImage>(
         "/bridge/sensors/color/compressed", qos);
-    auto pub_depth = node_pub->create_publisher<sensor_msgs::msg::Image>(
-        "/bridge/sensors/depth/image_raw", qos);
-
-    // Async depth publish: callback drops the frame into pending_depth and
-    // returns immediately so the executor is never stalled by a slow domain-1
-    // UDP write.  Only the latest frame is kept (KEEP_LAST=1 semantics).
-    std::mutex              depth_mtx;
-    std::condition_variable depth_cv;
-    sensor_msgs::msg::Image::UniquePtr pending_depth;
-
-    std::thread depth_thread([&]() {
-        while (!g_stop.load()) {
-            sensor_msgs::msg::Image::UniquePtr msg;
-            {
-                std::unique_lock<std::mutex> lk(depth_mtx);
-                depth_cv.wait_for(lk, std::chrono::milliseconds(200),
-                    [&]{ return pending_depth != nullptr || g_stop.load(); });
-                msg = std::move(pending_depth);
-            }
-            if (msg) {
-                pub_depth->publish(std::move(msg));
-            }
-        }
-    });
+    auto pub_depth = node_pub->create_publisher<sensor_msgs::msg::CompressedImage>(
+        "/bridge/sensors/depth/compressedDepth", qos);
 
     // UniquePtr callbacks allow zero-copy forwarding within the same process.
+    // Both color (JPEG ~20 KB) and depth (PNG ~200-400 KB) are CompressedImage
+    // so publish latency is low enough to stay synchronous on the executor.
     auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
         "/onboard/sensors/camera/color/image_raw/compressed", qos,
         [&pub_color](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
             pub_color->publish(std::move(msg));
         });
 
-    auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
-        "/onboard/sensors/camera/aligned_depth_to_color/image_raw", qos,
-        [&](sensor_msgs::msg::Image::UniquePtr msg) {
-            std::lock_guard<std::mutex> lk(depth_mtx);
-            pending_depth = std::move(msg);
-            depth_cv.notify_one();
+    auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
+        "/onboard/sensors/camera/aligned_depth_to_color/image_raw/compressedDepth", qos,
+        [&pub_depth](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
+            pub_depth->publish(std::move(msg));
         });
 
     RCLCPP_INFO(node_sub->get_logger(),
@@ -126,7 +97,6 @@ int main(int argc, char ** argv)
         exec.spin_some(std::chrono::milliseconds(100));
     }
 
-    depth_thread.join();
     exec.remove_node(node_sub);
     node_sub.reset();
     node_pub.reset();
