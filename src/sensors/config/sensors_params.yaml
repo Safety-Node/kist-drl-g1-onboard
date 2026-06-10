@@ -109,6 +109,13 @@ odom_node:
     frame_id: "odom"
     child_frame_id: "robot_center"
 
+# [TASK-52] Unitree G1 built-in LiDAR point cloud relay (Livox Mid-360).
+# Relays /utlidar/cloud_livox_mid360 → /onboard/sensors/lidar/points.
+lidar_node:
+  ros__parameters:
+    source_topic: "/utlidar/cloud_livox_mid360"
+    frame_id: "utlidar_lidar"
+
 # [TASK-51] UWB + odom EKF 융합 위치 발행 (REQ-42, REQ-45).
 # /onboard/sensors/odom + /onboard/sensors/uwb/pose → EKF → /onboard/sensors/location
 location_node:

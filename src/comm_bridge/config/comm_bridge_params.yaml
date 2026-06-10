@@ -73,6 +73,10 @@ outbound_relay:
         dst:  "/bridge/sensors/location/diagnostics"
         type: "diagnostic_msgs/msg/DiagnosticStatus"
         qos:  "best_effort"
+      - src:  "/onboard/sensors/lidar/points"
+        dst:  "/bridge/sensors/lidar/points"
+        type: "sensor_msgs/msg/PointCloud2"
+        qos:  "best_effort"
 
       # ---------- State reports (RELIABLE — don't drop transitions) ----------
       - src:  "/onboard/motor/buf_state"
