@@ -113,6 +113,8 @@ def generate_launch_description():
             'align_depth.enable':         str(cam.get('align_depth', True)).lower(),
             'pointcloud.enable':          str(cam.get('pointcloud_enable', False)).lower(),
             'log_level':                  str(cam.get('log_level', 'error')),
+            'depth_module.enable_auto_exposure': str(cam.get('depth_module_enable_auto_exposure', True)).lower(),
+            'rgb_camera.enable_auto_exposure':   str(cam.get('rgb_camera_enable_auto_exposure', True)).lower(),
             # TODO(REQ-42) [TASK-32]: tune QoS.
         }
         # Pin a device/port only when set (empty = auto-select first device).
