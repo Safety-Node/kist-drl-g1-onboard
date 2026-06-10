@@ -40,9 +40,9 @@ cleanup() {
     # Kill the launch process and its entire process group
     kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
   done
-  # Wait a moment then force-kill any stragglers
+  # Wait a moment then force-kill any stragglers (camera already handled above).
   sleep 1
-  pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller\|realsense2_camera\|rs_launch" 2>/dev/null || true
+  pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
