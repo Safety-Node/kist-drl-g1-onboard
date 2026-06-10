@@ -12,10 +12,16 @@
  * Publications   (domain 1, BEST_EFFORT depth=1):
  *   /bridge/sensors/color/compressed
  *   /bridge/sensors/depth/image_raw
+ *
+ * Depth is published from a dedicated thread so a slow domain-1 write
+ * (e.g. no workstation connected → UDP retcode -3) never blocks the
+ * executor and delays color callbacks.
  */
 #include <atomic>
+#include <condition_variable>
 #include <csignal>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 #include <rclcpp/rclcpp.hpp>
@@ -70,6 +76,28 @@ int main(int argc, char ** argv)
     auto pub_depth = node_pub->create_publisher<sensor_msgs::msg::Image>(
         "/bridge/sensors/depth/image_raw", qos);
 
+    // Async depth publish: callback drops the frame into pending_depth and
+    // returns immediately so the executor is never stalled by a slow domain-1
+    // UDP write.  Only the latest frame is kept (KEEP_LAST=1 semantics).
+    std::mutex              depth_mtx;
+    std::condition_variable depth_cv;
+    sensor_msgs::msg::Image::UniquePtr pending_depth;
+
+    std::thread depth_thread([&]() {
+        while (!g_stop.load()) {
+            sensor_msgs::msg::Image::UniquePtr msg;
+            {
+                std::unique_lock<std::mutex> lk(depth_mtx);
+                depth_cv.wait_for(lk, std::chrono::milliseconds(200),
+                    [&]{ return pending_depth != nullptr || g_stop.load(); });
+                msg = std::move(pending_depth);
+            }
+            if (msg) {
+                pub_depth->publish(std::move(msg));
+            }
+        }
+    });
+
     // UniquePtr callbacks allow zero-copy forwarding within the same process.
     auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
         "/onboard/sensors/camera/color/image_raw/compressed", qos,
@@ -79,8 +107,10 @@ int main(int argc, char ** argv)
 
     auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
         "/onboard/sensors/camera/aligned_depth_to_color/image_raw", qos,
-        [&pub_depth](sensor_msgs::msg::Image::UniquePtr msg) {
-            pub_depth->publish(std::move(msg));
+        [&](sensor_msgs::msg::Image::UniquePtr msg) {
+            std::lock_guard<std::mutex> lk(depth_mtx);
+            pending_depth = std::move(msg);
+            depth_cv.notify_one();
         });
 
     RCLCPP_INFO(node_sub->get_logger(),
@@ -96,6 +126,7 @@ int main(int argc, char ** argv)
         exec.spin_some(std::chrono::milliseconds(100));
     }
 
+    depth_thread.join();
     exec.remove_node(node_sub);
     node_sub.reset();
     node_pub.reset();
