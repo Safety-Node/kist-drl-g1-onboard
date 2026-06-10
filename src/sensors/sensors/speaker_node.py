@@ -24,8 +24,39 @@ from std_msgs.msg import Header
 
 from g1_onboard_msgs.msg import AudioPCM, SpeakerState
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+import unitree_sdk2py.core.channel as _sdk_ch
+from unitree_sdk2py.core.channel import ChannelFactory
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
+
+
+def _patch_channel_factory() -> None:
+    """Skip Domain() creation; join the already-active domain instead.
+
+    rmw_cyclonedds_cpp and unitree_sdk2py share libddsc.so.  Calling
+    Domain(0, config) after rclpy.init() raises DDSException because
+    domain 0 already exists.  We skip straight to DomainParticipant(),
+    which joins the already-active domain.  Mirrors imu_node.py.
+    """
+    from cyclonedds.domain import DomainParticipant as _DDP
+
+    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
+        if self.__class__._ChannelFactory__initialized:
+            return True
+        with self.__class__._ChannelFactory__init_lock:
+            if self.__class__._ChannelFactory__initialized:
+                return True
+            try:
+                self.__class__._ChannelFactory__participant = _DDP(id)
+            except Exception:
+                return False
+            self.__class__._ChannelFactory__qos = qos
+            self.__class__._ChannelFactory__initialized = True
+            return True
+
+    _sdk_ch.ChannelFactory.Init = _init
+
+
+_patch_channel_factory()
 
 
 # Pipeline LOCK (AudioPCM.msg)
@@ -44,10 +75,12 @@ class SpeakerNode(Node):
 
         # --- Parameters --------------------------------------------------
         self.declare_parameter('network_interface', 'eth0')
+        self.declare_parameter('domain_id', 0)
         self.declare_parameter('max_queue_depth', 50)
         self.declare_parameter('app_name', 'speaker_node')
 
         iface: str = self.get_parameter('network_interface').value
+        domain_id: int = self.get_parameter('domain_id').value
         self._max_q: int = int(self.get_parameter('max_queue_depth').value)
         self._app_name: str = self.get_parameter('app_name').value
 
@@ -64,13 +97,15 @@ class SpeakerNode(Node):
         self._stream_id: Optional[str] = None  # new id per playback session
 
         # --- AudioClient -------------------------------------------------
-        ChannelFactoryInitialize(0, iface)
+        # Join the domain already created by rclpy.init() — patched Init skips
+        # Domain() creation to avoid colliding with rmw_cyclonedds_cpp.
+        ChannelFactory().Init(domain_id, iface)
         self._client = AudioClient()
         self._client.SetTimeout(10.0)
         self._client.Init()
         self.get_logger().info(
-            f"AudioClient ready (iface={iface}, app_name={self._app_name}, "
-            f"max_queue_depth={self._max_q})")
+            f"AudioClient ready (iface={iface}, domain={domain_id}, "
+            f"app_name={self._app_name}, max_queue_depth={self._max_q})")
 
         # --- ROS I/O -----------------------------------------------------
         self._sub = self.create_subscription(
