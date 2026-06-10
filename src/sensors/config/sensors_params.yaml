@@ -116,6 +116,19 @@ lidar_node:
     source_topic: "/utlidar/cloud_livox_mid360"
     frame_id: "utlidar_lidar"
 
+# [TASK-53] LiDAR 기반 2D 장애물 맵 (고정 공간 격자 → OccupancyGrid).
+obstacle_map_node:
+  ros__parameters:
+    x_min: 0.0
+    x_max: 8.18
+    y_min: 0.0
+    y_max: 6.69
+    resolution: 0.1         # m — 격자 간격
+    z_min: 0.1              # m — 바닥 제외 하한
+    z_max: 1.8              # m — 천장 제외 상한
+    obstacle_radius: 0.15   # m — 장애물 판정 반경
+    frame_id: "map"
+
 # [TASK-51] UWB + odom EKF 융합 위치 발행 (REQ-42, REQ-45).
 # /onboard/sensors/odom + /onboard/sensors/uwb/pose → EKF → /onboard/sensors/location
 location_node:

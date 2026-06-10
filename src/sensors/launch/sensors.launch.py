@@ -186,6 +186,15 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
+    # [TASK-53]
+    obstacle_map_node = Node(
+        package='sensors',
+        executable='obstacle_map_node',
+        name='obstacle_map_node',
+        output='screen',
+        parameters=[params_file],
+    )
+
     # [TASK-52]
     lidar_node = Node(
         package='sensors',
@@ -205,4 +214,5 @@ def generate_launch_description():
         odom_node,
         location_node,
         lidar_node,
+        obstacle_map_node,
     ])
