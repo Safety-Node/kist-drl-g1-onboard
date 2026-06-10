@@ -53,8 +53,7 @@ int main(int argc, char ** argv)
     auto ctx_bridge = std::make_shared<rclcpp::Context>();
     rclcpp::InitOptions init_bridge;
     init_bridge.set_domain_id(kDomainBridge);
-    // initialize_logging=false: logging already initialized by ctx_onboard
-    ctx_bridge->init(argc, argv, init_bridge, false);
+    ctx_bridge->init(argc, argv, init_bridge);
 
     rclcpp::NodeOptions opts_sub;
     opts_sub.context(ctx_onboard);
