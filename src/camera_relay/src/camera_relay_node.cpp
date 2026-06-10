@@ -196,8 +196,10 @@ int main(int argc, char ** argv)
     //   wall_gap   = wall-clock callback interval → delivery lag if > stamp_gap
     auto last_depth_stamp_ns = std::make_shared<int64_t>(0);
     auto last_depth_cb       = std::make_shared<std::chrono::steady_clock::time_point>();
+    // DIAG: switched to raw (non-aligned) depth to check if align_depth is the bottleneck.
+    // If SDK-DROP disappears here → align_depth computation is causing the 100ms gaps.
     auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
-        "/onboard/sensors/camera/aligned_depth_to_color/image_raw", qos,
+        "/onboard/sensors/camera/depth/image_rect_raw", qos,
         [&, last_depth_stamp_ns, last_depth_cb](sensor_msgs::msg::Image::UniquePtr msg) {
             auto now      = std::chrono::steady_clock::now();
             int64_t stamp = rclcpp::Time(msg->header.stamp).nanoseconds();
@@ -220,7 +222,7 @@ int main(int argc, char ** argv)
                 }
             }
             *last_depth_stamp_ns = stamp;
-            *last_depth_cb       = now;
+            *last_depth_cb = now;
 
             std::lock_guard<std::mutex> lk(depth_mtx);
             pending_depth = std::move(msg);
