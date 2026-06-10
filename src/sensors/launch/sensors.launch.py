@@ -114,8 +114,6 @@ def generate_launch_description():
                 'align_depth.enable':         'true',
                 'pointcloud.enable':          'false',
                 'log_level':                  'error',  # hides benign power_line_frequency WARN (and all camera WARNs)
-                'initial_reset':              'true',   # HW reset on startup — clears stuck/busy state from a prior run
-                'wait_for_device_timeout':    '5.0',   # wait for re-enumeration after reset instead of erroring
                 # TODO(REQ-42) [TASK-32]: tune QoS.
             }.items(),
         ))
