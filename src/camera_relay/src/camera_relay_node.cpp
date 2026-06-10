@@ -53,7 +53,8 @@ int main(int argc, char ** argv)
     auto ctx_bridge = std::make_shared<rclcpp::Context>();
     rclcpp::InitOptions init_bridge;
     init_bridge.set_domain_id(kDomainBridge);
-    ctx_bridge->init(argc, argv, init_bridge);
+    // initialize_logging=false: logging already initialized by ctx_onboard
+    ctx_bridge->init(argc, argv, init_bridge, false);
 
     rclcpp::NodeOptions opts_sub;
     opts_sub.context(ctx_onboard);
@@ -88,7 +89,9 @@ int main(int argc, char ** argv)
 
     // node_pub is publish-only — no need to spin it.
     // Spin node_sub in this thread; check g_stop every 100 ms.
-    rclcpp::executors::SingleThreadedExecutor exec;
+    rclcpp::ExecutorOptions exec_opts;
+    exec_opts.context = ctx_onboard;
+    rclcpp::executors::SingleThreadedExecutor exec(exec_opts);
     exec.add_node(node_sub);
     while (!g_stop.load()) {
         exec.spin_some(std::chrono::milliseconds(100));
