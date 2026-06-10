@@ -30,6 +30,12 @@ sleep 0.5
 
 cleanup() {
   echo "[run_onboard.sh] stopping…"
+  # Stop camera gracefully (SIGINT closes the USB device); -9 only if it hangs.
+  if pgrep -f "realsense2_camera" >/dev/null; then
+    pkill -INT -f "realsense2_camera" 2>/dev/null || true
+    for _ in $(seq 1 50); do pgrep -f "realsense2_camera" >/dev/null || break; sleep 0.1; done
+    pkill -9 -f "realsense2_camera" 2>/dev/null || true
+  fi
   for pid in "${PIDS[@]}"; do
     # Kill the launch process and its entire process group
     kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
