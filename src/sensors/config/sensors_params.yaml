@@ -89,10 +89,8 @@ camera_node:
     depth_height: 720
     depth_fps: 30
     align_depth: true               # register depth to color frame (aligned_depth_to_color)
-    pointcloud_enable: false        # ⚠ KEEP false — true makes depth die with Hardware Error on this build
-    log_level: "error"              # realsense node logger; "error" hides benign param WARNs
+    jpeg_quality: 80                 # JPEG quality for color/compressed (1-100)
     serial_no: ""                   # "" = auto-select; pin a camera e.g. "243122075858"
-    usb_port_id: ""                 # "" = any; pin a physical USB port if needed
 
 # [TASK-30] UWB absolute pose (REQ-37). Decawave DWM series, DWM UART shell protocol.
 uwb_node:
