@@ -24,19 +24,25 @@
 #
 # TODO(REQ-32) [TASK-28]: finalise after /bridge/ schema is locked.
 
-outbound_relay:
+camera_relay:
   ros__parameters:
-    # /onboard/<src>  →  /bridge/<dst>
+    # Camera topics handled by camera_relay node (separate process + async publish).
+    # Kept separate from outbound_relay to prevent large-frame DDS SHM port
+    # contention from blocking realsense2_camera's publisher loop.
     relays:
-      # ---------- Sensor streams (BEST_EFFORT — freshness wins) ----------
       - src:  "/onboard/sensors/camera/color/image_raw/compressed"
         dst:  "/bridge/sensors/color/compressed"
         type: "sensor_msgs/msg/CompressedImage"
-        qos:  "best_effort"
       - src:  "/onboard/sensors/camera/aligned_depth_to_color/image_raw"
         dst:  "/bridge/sensors/depth/image_raw"
         type: "sensor_msgs/msg/Image"
-        qos:  "best_effort"
+
+outbound_relay:
+  ros__parameters:
+    # /onboard/<src>  →  /bridge/<dst>
+    # Camera topics moved to camera_relay above.
+    relays:
+      # ---------- Sensor streams (BEST_EFFORT — freshness wins) ----------
       - src:  "/onboard/sensors/audio/pcm"
         dst:  "/bridge/sensors/audio_pcm"
         type: "g1_onboard_msgs/msg/AudioPCM"

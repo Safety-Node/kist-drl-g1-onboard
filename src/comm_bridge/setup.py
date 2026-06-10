@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'outbound_relay = comm_bridge.outbound_relay:main',
+            'camera_relay   = comm_bridge.camera_relay:main',
             'inbound_relay  = comm_bridge.inbound_relay:main',
         ],
     },
