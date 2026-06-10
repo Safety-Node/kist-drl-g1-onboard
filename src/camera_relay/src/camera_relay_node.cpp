@@ -9,12 +9,13 @@
  *   /bridge/sensors/color/compressed       (CompressedImage, JPEG)
  *   /bridge/sensors/depth/compressedDepth  (CompressedImage, RVL)
  *
- * Depth is RVL-encoded in a dedicated thread.  RVL (Run-Length Variable-
- * length, Wilson 2017) is lossless and 10-30× faster than PNG on ARM because
- * it only scans the pixel array once with no entropy coding.
- * Wire format matches image_transport compressedDepth:
- *   format = "16UC1; compressedDepth rvl"
- *   data   = raw RVL bytes (no extra header for integer depth)
+ * Both callbacks return immediately (move into a KEEP_LAST=1 slot) so the
+ * executor is never stalled by a slow domain-1 network write.  Dedicated
+ * threads handle the publish independently.
+ *
+ * Depth uses RVL (Run-Length Variable-length, Wilson 2017): lossless,
+ * 10-30× faster than PNG on ARM, no extra dependencies.
+ * Wire format: "16UC1; compressedDepth rvl" (image_transport compatible).
  */
 #include <atomic>
 #include <condition_variable>
@@ -29,8 +30,6 @@
 
 // ---------------------------------------------------------------------------
 // RVL encoder — Andrew Wilson, "Fast Lossless Depth Image Compression" (2017)
-// Encodes 16-bit depth pixel-deltas with nibble-based variable-length coding.
-// Zero runs and non-zero delta runs are encoded separately for speed.
 // ---------------------------------------------------------------------------
 namespace rvl {
 
@@ -120,16 +119,32 @@ int main(int argc, char ** argv)
     auto pub_depth = node_pub->create_publisher<sensor_msgs::msg::CompressedImage>(
         "/bridge/sensors/depth/compressedDepth", qos);
 
-    // Depth: callback stores latest frame; dedicated thread RVL-encodes and
-    // publishes.  KEEP_LAST=1 slot drops stale frames under back-pressure.
+    // --- color async publish thread ---
+    std::mutex              color_mtx;
+    std::condition_variable color_cv;
+    sensor_msgs::msg::CompressedImage::UniquePtr pending_color;
+
+    std::thread color_thread([&]() {
+        while (!g_stop.load()) {
+            sensor_msgs::msg::CompressedImage::UniquePtr msg;
+            {
+                std::unique_lock<std::mutex> lk(color_mtx);
+                color_cv.wait_for(lk, std::chrono::milliseconds(200),
+                    [&]{ return pending_color != nullptr || g_stop.load(); });
+                msg = std::move(pending_color);
+            }
+            if (!msg) { continue; }
+            pub_color->publish(std::move(msg));
+        }
+    });
+
+    // --- depth async publish thread (RVL encode + publish) ---
     std::mutex              depth_mtx;
     std::condition_variable depth_cv;
     sensor_msgs::msg::Image::UniquePtr pending_depth;
 
     std::thread depth_thread([&]() {
-        // Pre-allocate worst-case RVL buffer (same size as raw frame).
         std::vector<uint8_t> rvl_buf;
-
         while (!g_stop.load()) {
             sensor_msgs::msg::Image::UniquePtr msg;
             {
@@ -141,7 +156,7 @@ int main(int argc, char ** argv)
             if (!msg) { continue; }
 
             const int num_pixels = static_cast<int>(msg->width * msg->height);
-            rvl_buf.resize(msg->data.size());  // upper bound
+            rvl_buf.resize(msg->data.size());
 
             int compressed_bytes = rvl::compress(
                 reinterpret_cast<const uint16_t *>(msg->data.data()),
@@ -156,11 +171,13 @@ int main(int argc, char ** argv)
         }
     });
 
-    // Color: already JPEG-compressed by the driver — zero-copy forward.
+    // Both callbacks return immediately — executor is never stalled.
     auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
         "/onboard/sensors/camera/color/image_raw/compressed", qos,
-        [&pub_color](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
-            pub_color->publish(std::move(msg));
+        [&](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
+            std::lock_guard<std::mutex> lk(color_mtx);
+            pending_color = std::move(msg);
+            color_cv.notify_one();
         });
 
     auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
@@ -182,6 +199,7 @@ int main(int argc, char ** argv)
         exec.spin_some(std::chrono::milliseconds(100));
     }
 
+    color_thread.join();
     depth_thread.join();
     exec.remove_node(node_sub);
     node_sub.reset();
