@@ -1,9 +1,9 @@
 """
 RealSense D435i camera node — pyrealsense2 SDK 직접 사용.
 
-realsense2_camera C++ 드라이버를 대체. 프레임 캡처는 background thread에서
-독립적으로 실행하므로, outbound_relay의 DDS 콜백이 느려도 capture pipeline이
-막히지 않는다.
+realsense2_camera C++ 드라이버를 대체. 프레임 캡처/인코딩/발행을 모두
+background thread에서 처리하므로 ROS2 타이머 스케줄링 지연 없이 하드웨어
+프레임 레이트 그대로 발행한다.
 
 Publications (BEST_EFFORT, depth=1):
   /onboard/sensors/camera/color/image_raw/compressed   CompressedImage (JPEG)
@@ -65,11 +65,6 @@ class CameraNode(Node):
             _QOS,
         )
 
-        # 최신 프레임을 background thread가 쓰고, 타이머가 읽는다
-        self._latest_bgr:   Optional[np.ndarray] = None  # (H, W, 3) uint8
-        self._latest_depth: Optional[np.ndarray] = None  # (H, W) uint16 raw
-        self._frame_lock = threading.Lock()
-
         self._running = False
         self._capture_thread: Optional[threading.Thread] = None
         self._pipeline: Optional[rs.pipeline] = None
@@ -77,7 +72,6 @@ class CameraNode(Node):
 
         self._start_pipeline()
 
-        self._timer = self.create_timer(1.0 / self._color_fps, self._publish)
         self.get_logger().info(
             f'camera_node ready — '
             f'{self._color_w}×{self._color_h} @ {self._color_fps} Hz '
@@ -107,7 +101,6 @@ class CameraNode(Node):
         if self._do_align:
             self._aligner = rs.align(rs.stream.color)
 
-        # auto-exposure warm-up
         for _ in range(_WARMUP_FRAMES):
             self._pipeline.wait_for_frames()
 
@@ -119,49 +112,42 @@ class CameraNode(Node):
     def _capture_loop(self) -> None:
         while self._running:
             try:
-                frames = self._pipeline.wait_for_frames(timeout_ms=150)
+                frames = self._pipeline.wait_for_frames(timeout_ms=1000)
                 if self._aligner:
                     frames = self._aligner.process(frames)
                 color_f = frames.get_color_frame()
                 depth_f = frames.get_depth_frame()
-                if color_f and depth_f:
-                    bgr   = np.asanyarray(color_f.get_data()).copy()
-                    depth = np.asanyarray(depth_f.get_data()).copy()  # uint16
-                    with self._frame_lock:
-                        self._latest_bgr   = bgr
-                        self._latest_depth = depth
+                if not color_f or not depth_f:
+                    continue
+
+                bgr   = np.asanyarray(color_f.get_data()).copy()
+                depth = np.asanyarray(depth_f.get_data()).copy()
+                stamp = self.get_clock().now().to_msg()
+
+                ok, buf = cv2.imencode(
+                    '.jpg', bgr, [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_q])
+                if ok:
+                    cmsg = CompressedImage()
+                    cmsg.header = Header(
+                        stamp=stamp, frame_id='camera_color_optical_frame')
+                    cmsg.format = 'jpeg'
+                    cmsg.data   = buf.tobytes()
+                    self._pub_color.publish(cmsg)
+
+                dmsg = Image()
+                dmsg.header       = Header(
+                    stamp=stamp, frame_id='camera_depth_optical_frame')
+                dmsg.height       = depth.shape[0]
+                dmsg.width        = depth.shape[1]
+                dmsg.encoding     = '16UC1'
+                dmsg.is_bigendian = False
+                dmsg.step         = depth.shape[1] * 2
+                dmsg.data         = depth.tobytes()
+                self._pub_depth.publish(dmsg)
+
             except Exception as e:
                 if self._running:
                     self.get_logger().warn(f'camera capture: {e}')
-
-    def _publish(self) -> None:
-        with self._frame_lock:
-            bgr   = self._latest_bgr
-            depth = self._latest_depth
-        if bgr is None or depth is None:
-            return
-
-        stamp = self.get_clock().now().to_msg()
-
-        # Color → JPEG CompressedImage
-        ok, buf = cv2.imencode('.jpg', bgr, [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_q])
-        if ok:
-            msg = CompressedImage()
-            msg.header = Header(stamp=stamp, frame_id='camera_color_optical_frame')
-            msg.format = 'jpeg'
-            msg.data   = buf.tobytes()
-            self._pub_color.publish(msg)
-
-        # Depth → 16UC1 Image (raw z16 값, mm 단위)
-        msg = Image()
-        msg.header       = Header(stamp=stamp, frame_id='camera_depth_optical_frame')
-        msg.height       = depth.shape[0]
-        msg.width        = depth.shape[1]
-        msg.encoding     = '16UC1'
-        msg.is_bigendian = False
-        msg.step         = depth.shape[1] * 2
-        msg.data         = depth.tobytes()
-        self._pub_depth.publish(msg)
 
     # ------------------------------------------------------------------ #
 
