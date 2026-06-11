@@ -134,6 +134,8 @@ class ObstacleMapNode(Node):
         # ── Pub / Sub ─────────────────────────────────────────────
         self._pub = self.create_publisher(
             OccupancyGrid, '/onboard/sensors/lidar/occupancy', _BE_QOS)
+        self._pub_filtered = self.create_publisher(
+            PointCloud2, '/onboard/sensors/lidar/filtered_points', _BE_QOS)
 
         self.create_subscription(
             PoseStamped, '/onboard/sensors/location',
@@ -223,6 +225,7 @@ class ObstacleMapNode(Node):
         if len(cols) > 0:
             grid[rows, cols] = 100
         self._publish(msg.header, grid.ravel())
+        self._publish_filtered(msg.header, pts_map)
 
     # ── Publish helpers ───────────────────────────────────────────
 
@@ -236,6 +239,27 @@ class ObstacleMapNode(Node):
 
     def _publish_empty(self, src_header) -> None:
         self._publish(src_header, np.zeros(self._nx * self._ny, dtype=np.int8))
+
+    def _publish_filtered(self, src_header, pts_xy: np.ndarray) -> None:
+        n = len(pts_xy)
+        xyz = np.zeros((n, 3), dtype=np.float32)
+        xyz[:, :2] = pts_xy
+        msg = PointCloud2()
+        msg.header.stamp    = src_header.stamp
+        msg.header.frame_id = self._frame_id
+        msg.height     = 1
+        msg.width      = n
+        msg.fields     = [
+            PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+        ]
+        msg.is_bigendian = False
+        msg.point_step   = 12
+        msg.row_step     = 12 * n
+        msg.data         = xyz.tobytes()
+        msg.is_dense     = True
+        self._pub_filtered.publish(msg)
 
 
 def main(args=None) -> None:
