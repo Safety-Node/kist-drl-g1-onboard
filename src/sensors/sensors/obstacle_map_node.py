@@ -97,7 +97,7 @@ class ObstacleMapNode(Node):
         self.declare_parameter('robot_radius', 0.5)    # m — 로봇 근접 포인트 제외 반경
         self.declare_parameter('lidar_offset_x', 0.0)  # m — LiDAR mount offset (robot center)
         self.declare_parameter('lidar_offset_y', 0.0)  # m — G1 head 정중앙 → (0, 0)
-        self.declare_parameter('mirror_y', False)       # LiDAR 상하 반전 장착 시 Y축 반전
+        self.declare_parameter('mirror_y', False)       # LiDAR 180° 반전 장착 시 Y축 반전 (Z는 z_min/z_max로 처리)
         self.declare_parameter('frame_id', 'map')
 
         x_min               = self.get_parameter('x_min').value

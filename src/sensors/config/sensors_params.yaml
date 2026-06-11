@@ -130,7 +130,7 @@ obstacle_map_node:
     robot_radius: 0.5       # m — 로봇 근접 포인트 제외 반경 (LiDAR 로컬 XY 기준)
     lidar_offset_x: 0.0     # m — LiDAR 장착 오프셋 (G1 head 정중앙 → 0)
     lidar_offset_y: 0.0     # m
-    mirror_y: true          # LiDAR 상하 반전 장착 → Y축 반전
+    mirror_y: true          # LiDAR 180° 반전 장착 시 Y축 반전 (Z 반전은 z_min/z_max로 처리)
     frame_id: "map"
 
 # [TASK-51] UWB + odom EKF 융합 위치 발행 (REQ-42, REQ-45).
