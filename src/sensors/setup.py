@@ -32,7 +32,8 @@ setup(
             'uwb_node         = sensors.uwb_node:main',
             'odom_node        = sensors.odom_node:main',
             'location_node    = sensors.location_node:main',
-            'lidar_node       = sensors.lidar_node:main',
+            'lidar_node        = sensors.lidar_node:main',
+            'obstacle_map_node = sensors.obstacle_map_node:main',
         ],
     },
 )
