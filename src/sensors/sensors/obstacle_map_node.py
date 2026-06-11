@@ -94,6 +94,7 @@ class ObstacleMapNode(Node):
         self.declare_parameter('z_min', 0.1)            # m — ignore ground
         self.declare_parameter('z_max', 1.8)            # m — ignore ceiling
         self.declare_parameter('obstacle_radius', 0.15) # m — proximity threshold
+        self.declare_parameter('robot_radius', 0.5)    # m — 로봇 근접 포인트 제외 반경
         self.declare_parameter('lidar_offset_x', 0.0)  # m — LiDAR mount offset (robot center)
         self.declare_parameter('lidar_offset_y', 0.0)  # m — G1 head 정중앙 → (0, 0)
         self.declare_parameter('frame_id', 'map')
@@ -106,6 +107,7 @@ class ObstacleMapNode(Node):
         self._z_min         = self.get_parameter('z_min').value
         self._z_max         = self.get_parameter('z_max').value
         self.get_parameter('obstacle_radius')          # yaml 호환 유지
+        self._robot_r       = self.get_parameter('robot_radius').value
         self._lidar_dx      = self.get_parameter('lidar_offset_x').value
         self._lidar_dy      = self.get_parameter('lidar_offset_y').value
         self._frame_id      = self.get_parameter('frame_id').value
@@ -176,6 +178,11 @@ class ObstacleMapNode(Node):
         # Z 범위 필터 — 바닥·천장 제거
         mask = (xyz[:, 2] >= self._z_min) & (xyz[:, 2] <= self._z_max)
         pts = xyz[mask, :2]   # (M, 2) — LiDAR 로컬 XY
+
+        # 로봇 근접 포인트 제거 — LiDAR 로컬 원점 기준 robot_radius 이내 제외
+        if self._robot_r > 0:
+            dist2 = pts[:, 0] ** 2 + pts[:, 1] ** 2
+            pts = pts[dist2 >= self._robot_r ** 2]
 
         if len(pts) == 0:
             self._publish_empty(msg.header)
