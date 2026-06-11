@@ -31,7 +31,6 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from sensor_msgs.msg import PointCloud2, PointField
 
-from scipy.spatial import cKDTree
 
 _BE_QOS = QoSProfile(
     reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -106,7 +105,7 @@ class ObstacleMapNode(Node):
         self._res           = self.get_parameter('resolution').value
         self._z_min         = self.get_parameter('z_min').value
         self._z_max         = self.get_parameter('z_max').value
-        self._obs_r         = self.get_parameter('obstacle_radius').value
+        self.get_parameter('obstacle_radius')          # yaml 호환 유지
         self._lidar_dx      = self.get_parameter('lidar_offset_x').value
         self._lidar_dy      = self.get_parameter('lidar_offset_y').value
         self._frame_id      = self.get_parameter('frame_id').value
@@ -117,13 +116,9 @@ class ObstacleMapNode(Node):
         self._robot_y: float | None = None
         self._robot_yaw: float | None = None
 
-        # ── Static grid (row = y, col = x) ───────────────────────
-        xs = np.arange(x_min, x_max, self._res, dtype=np.float32)
-        ys = np.arange(y_min, y_max, self._res, dtype=np.float32)
-        gx, gy = np.meshgrid(xs, ys)
-        self._nx = len(xs)
-        self._ny = len(ys)
-        self._grid_xy = np.stack([gx.ravel(), gy.ravel()], axis=1)  # (ny*nx, 2)
+        # ── Grid dimensions ───────────────────────────────────────
+        self._nx = int(np.ceil((x_max - x_min) / self._res))
+        self._ny = int(np.ceil((y_max - y_min) / self._res))
 
         # ── OccupancyGrid 메타 ────────────────────────────────────
         self._map_meta = MapMetaData()
@@ -148,9 +143,9 @@ class ObstacleMapNode(Node):
 
         self.get_logger().info(
             f'obstacle_map_node ready — '
-            f'grid {self._nx}×{self._ny} ({len(self._grid_xy)} cells), '
+            f'grid {self._nx}×{self._ny} ({self._nx * self._ny} cells), '
             f'res={self._res}m, z=[{self._z_min},{self._z_max}]m, '
-            f'r={self._obs_r}m, lidar_offset=({self._lidar_dx},{self._lidar_dy})m'
+            f'lidar_offset=({self._lidar_dx},{self._lidar_dy})m'
         )
 
     # ── Location callback ─────────────────────────────────────────
@@ -170,6 +165,7 @@ class ObstacleMapNode(Node):
 
         if rx is None:
             self.get_logger().warn('obstacle_map_node: waiting for robot pose...', once=True)
+            self._publish_empty(msg.header)
             return
 
         xyz = _parse_xyz(msg)
@@ -206,16 +202,20 @@ class ObstacleMapNode(Node):
             self._publish_empty(msg.header)
             return
 
-        # KD-tree: 각 격자점의 최근접 LiDAR 점까지 거리
-        tree = cKDTree(pts_map)
-        distances, _ = tree.query(
-            self._grid_xy, k=1,
-            distance_upper_bound=self._obs_r,
-            workers=-1,
-        )
+        # LiDAR 점 → 격자 인덱스 변환
+        x_origin = self._map_meta.origin.position.x
+        y_origin = self._map_meta.origin.position.y
+        cols = ((pts_map[:, 0] - x_origin) / self._res).astype(np.int32)
+        rows = ((pts_map[:, 1] - y_origin) / self._res).astype(np.int32)
 
-        cells = np.where(distances < self._obs_r, 100, 0).astype(np.int8)
-        self._publish(msg.header, cells)
+        valid = (cols >= 0) & (cols < self._nx) & (rows >= 0) & (rows < self._ny)
+        cols = cols[valid]
+        rows = rows[valid]
+
+        grid = np.zeros((self._ny, self._nx), dtype=np.int8)
+        if len(cols) > 0:
+            grid[rows, cols] = 100
+        self._publish(msg.header, grid.ravel())
 
     # ── Publish helpers ───────────────────────────────────────────
 
@@ -228,7 +228,7 @@ class ObstacleMapNode(Node):
         self._pub.publish(grid)
 
     def _publish_empty(self, src_header) -> None:
-        self._publish(src_header, np.zeros(len(self._grid_xy), dtype=np.int8))
+        self._publish(src_header, np.zeros(self._nx * self._ny, dtype=np.int8))
 
 
 def main(args=None) -> None:
