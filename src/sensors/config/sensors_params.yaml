@@ -123,7 +123,7 @@ obstacle_map_node:
     x_max: 8.18
     y_min: 0.0
     y_max: 6.69
-    resolution: 0.1         # m — 격자 간격
+    resolution: 0.05        # m — 격자 간격
     z_min: -10.0            # m — 바닥 제외 하한
     z_max:   0.5            # m — 천장 제외 상한
     obstacle_radius: 0.15   # m — 장애물 판정 반경
