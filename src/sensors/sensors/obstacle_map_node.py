@@ -97,6 +97,7 @@ class ObstacleMapNode(Node):
         self.declare_parameter('robot_radius', 0.5)    # m — 로봇 근접 포인트 제외 반경
         self.declare_parameter('lidar_offset_x', 0.0)  # m — LiDAR mount offset (robot center)
         self.declare_parameter('lidar_offset_y', 0.0)  # m — G1 head 정중앙 → (0, 0)
+        self.declare_parameter('mirror_y', False)       # LiDAR 상하 반전 장착 시 Y축 반전
         self.declare_parameter('frame_id', 'map')
 
         x_min               = self.get_parameter('x_min').value
@@ -110,6 +111,7 @@ class ObstacleMapNode(Node):
         self._robot_r       = self.get_parameter('robot_radius').value
         self._lidar_dx      = self.get_parameter('lidar_offset_x').value
         self._lidar_dy      = self.get_parameter('lidar_offset_y').value
+        self._mirror_y      = self.get_parameter('mirror_y').value
         self._frame_id      = self.get_parameter('frame_id').value
 
         # ── Robot pose (location_node에서 수신, 스레드 안전) ──────
@@ -189,6 +191,10 @@ class ObstacleMapNode(Node):
         if len(pts) == 0:
             self._publish_empty(msg.header)
             return
+
+        # LiDAR 상하 반전 장착 보정
+        if self._mirror_y:
+            pts[:, 1] = -pts[:, 1]
 
         # LiDAR 로컬 → map 프레임 변환
         # p_map = R(yaw) * p_lidar + [rx + dx, ry + dy]
