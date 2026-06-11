@@ -124,7 +124,7 @@ obstacle_map_node:
     y_min: 0.0
     y_max: 6.69
     resolution: 0.1         # m — 격자 간격
-    z_min: 0.1              # m — 바닥 제외 하한
+    z_min: 0.3              # m — 바닥 제외 하한
     z_max: 1.8              # m — 천장 제외 상한
     obstacle_radius: 0.15   # m — 장애물 판정 반경
     lidar_offset_x: 0.0     # m — LiDAR 장착 오프셋 (G1 head 정중앙 → 0)
