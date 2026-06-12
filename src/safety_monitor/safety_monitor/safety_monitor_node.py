@@ -17,6 +17,9 @@ Checks:
   known joint_names → REASON_MALFORMED_CMD (drop chunk).
 - joint_limit (per step): q/dq/tau out of yaml range → REASON_JOINT_LIMIT if
   joint_limit_estop else clamp into range and forward.
+- rate-of-change (per chunk): |Δq| between consecutive steps over
+  joint_rate_of_change_limit → REASON_JOINT_LIMIT (chunk-internal only;
+  chunk boundary is motor_controller crossfade's job).
 - comms watchdog (loop): cmd/arm, cmd/low silent past per-stream timeout (armed
   on first message) → REASON_COMMS_TIMEOUT.
 - self-watchdog (loop): loop interval > loop_overrun_factor*period → REASON_WATCHDOG.
@@ -84,6 +87,7 @@ class SafetyMonitorNode(Node):
         self._proximity_depth_pixel_thresh: int = self.get_parameter('proximity_depth_pixel_thresh').value
         self._proximity_roi_frac: float = self.get_parameter('proximity_roi_frac').value
         self._depth_topic: str = self.get_parameter('depth_topic').value
+        self._joint_rate_limit: float = self.get_parameter('joint_rate_of_change_limit').value
 
         # joint_limits: {name: (q_min, q_max, dq_max, tau_max)}
         self._joint_limits: dict[str, tuple[float, float, float, float]] = {
@@ -142,11 +146,21 @@ class SafetyMonitorNode(Node):
         if self._estop_active and self._estop_latch:
             return  # latched — drop until restart (TODO: reset path)
         out_steps = []
+        prev_q: dict[str, float] = {}  # joint → last step's q (within this chunk)
         for i, step in enumerate(chunk.steps):
             ok, reason, detail, out = self._validate_and_clamp(step)
             if not ok:
                 self._trigger_estop(reason, f'chunk {chunk.chunk_id} step {i}: {detail}')
                 return  # one bad step drops the whole chunk
+            rate = self._check_rate(step, prev_q)
+            if rate is not None:
+                name, dq = rate
+                self._trigger_estop(
+                    EstopFlag.REASON_JOINT_LIMIT,
+                    f'chunk {chunk.chunk_id} step {i}: rate {name} dq {dq:.3f} > {self._joint_rate_limit:.3f}')
+                return
+            for n, q in zip(step.joint_names, step.q):
+                prev_q[n] = q
             out_steps.append(out)
         if self._estop_active:  # non-latching: clean chunk clears
             self._clear_estop()
@@ -192,6 +206,13 @@ class SafetyMonitorNode(Node):
         out.mode, out.weight = cmd.mode, cmd.weight
         out.chunk_id, out.step_index = cmd.chunk_id, cmd.step_index
         return True, EstopFlag.REASON_NONE, '', out
+
+    def _check_rate(self, step, prev_q: dict):
+        """Δq/tick between consecutive chunk steps; return (joint, dq) on violation."""
+        for name, q in zip(step.joint_names, step.q):
+            if name in prev_q and abs(q - prev_q[name]) > self._joint_rate_limit:
+                return name, q - prev_q[name]
+        return None
 
     def _on_depth(self, img: Image) -> None:
         if self._estop_active:
