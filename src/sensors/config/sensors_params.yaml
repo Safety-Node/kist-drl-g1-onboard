@@ -82,11 +82,11 @@ camera_node:
   ros__parameters:
     enable_color: true
     enable_depth: true
-    color_width: 1280
-    color_height: 720
+    color_width: 640
+    color_height: 480
     color_fps: 30
-    depth_width: 1280
-    depth_height: 720
+    depth_width: 640
+    depth_height: 480
     depth_fps: 30
     align_depth: true               # register depth to color frame (aligned_depth_to_color)
     jpeg_quality: 80                 # JPEG quality for color/compressed (1-100)
