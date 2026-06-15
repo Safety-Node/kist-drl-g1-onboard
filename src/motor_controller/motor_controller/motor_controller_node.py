@@ -1,110 +1,257 @@
 """
-100 Hz control loop driving the G1 SDK (REQ-34 v2026-05-22).
+100 Hz control loop driving the G1 SDK (REQ-34) [TASK-34].
 
 Subscriptions:
-- /onboard/safety/validated_joint_chunk (JointCmdChunk)
-                                                 → unpack into joint_buf
-                                                   (arm + low both arrive here;
-                                                    distinguished by joint_names;
-                                                    carries chunk_id; per-step
-                                                    step_index inside the chunk
-                                                    is for trace/log only)
-- /onboard/safety/estop (EstopFlag)              structured DDS context
+- /onboard/cmd/vel (Twist)                       → velocity_buf → LocoClient.Move
 - /onboard/cmd/loco (LocoCommand)                LocoClient FSM dispatch (no buffer)
+- /onboard/safety/estop (EstopFlag)              E-STOP DDS context
+- /onboard/safety/validated_joint_chunk (JointCmdChunk)  joint path — TBD (chunk)
 - POSIX SHM byte 'safety_flag'                   zero-latency E-STOP poll
 
 Publications:
 - /onboard/motor/buf_state (BufState)            telemetry → comm_bridge → PC
 
-G1 SDK targets:
-- rt/arm_sdk          upper-body joints, weight = motor_cmd[29].q (from /cmd/arm)
-- rt/lowcmd           lower-body joints, weight ignored (from /cmd/low, NEW 2026-05-22)
-- LocoClient action   discrete FSM (Damp / StandUp / BalanceStand / SitDown / ...)
-                      via LocoCommand channel — usage scope TBD (likely
-                      demo entry/exit + posture transitions; not finalized)
+Dispatch:
+- VELOCITY → LocoClient.Move(vx,vy,vyaw)  (continuous walking; PC NavigationProvider)
+- LOCO     → LocoClient.<method>() from LocoCommand.action  (discrete FSM, bypasses queue)
+- ESTOP    → flush + LocoClient.<estop_loco_action>()  (SHM byte OR DDS active)
+- JOINT    → rt/arm_sdk / rt/lowcmd publish from joint_buf  — TBD (safety_monitor chunk path)
 
-3 dispatch modes (queue does not carry an enum; dispatcher routes by joint_names):
-- JOINT_CMD_ARM → rt/arm_sdk publish (weight ramped from arm_default_weight)
-- JOINT_CMD_LOW → rt/lowcmd publish (weight ignored)
-- LOCO_CMD      → LocoClient.<method>() from LocoCommand.action
-- ESTOP         → LocoClient.Damp() + arm weight 1.0→0.0 ramp + flush
+E-STOP triggers (rising edge in _control_loop): SHM 'safety_flag'==1 OR EstopFlag.active.
+Both are set by safety_monitor; this node only honours them (no internal estop logic).
 
-2026-05-22 KIST mail (later partly reversed — see 2026-05-26 below):
-- Loop rate 20 Hz → 100 Hz. Existing 20 ms ramp / busy-wait hybrid timer /
-  overrun thresholds rerated against the 10 ms period (linspace(0,1,N) ramp
-  count doubles to preserve ~2.0 s envelope).
+dry_run / SDK: _init_sdk falls back to dry_run (log-only) if dry_run=true or the SDK
+fails to connect, so the node runs on the bench without a robot.
 
-2026-05-26 KIST 회의 (partly reverses 2026-05-22):
-- velocity_buf restored (5/26). PC NavigationProvider 발행 Twist 를
-  velocity_buf 에 enqueue, 100 Hz loop 가 pop 해서
-  LocoClient.Move(vx, vy, vyaw) 호출. Walking 은 PC NavigationProvider
-  (Unitree SDK loco_client) 가 처리하며 더 이상 low-level VLA 가 아니다.
-  VELOCITY_CMD 디스패치 모드 부활. VLA 범위 축소 (arm/hand only).
-
-2026-05-26 wire reversal (workstation repo):
-- /bridge/cmd/{arm,low} now carries JointCmdChunk (not single-step JointCmd).
-  Chunk-handling responsibility moves from PC to here. The PC publishes a
-  full action_horizon-step chunk per inference (~15 Hz); this node unpacks
-  each chunk's steps[] into joint_buf and paces them at 100 Hz.
-- Chunk-boundary crossfade is now CANONICAL on NX (queue_aggregate.crossfade()
-  default ON). On chunk_id transition we keep the tail of the previous
-  chunk still in joint_buf, crossfade it with the head of the new chunk,
-  then drop any remaining old-chunk tail (mid-chunk preemption).
-- Empty queue (underflow) holds the last popped step at 100 Hz so NX never
-  silently stops publishing during inference lag.
-- Non-chunk producers (teleop, CLI) MUST use a separate single-step
-  JointCmd topic per JointCmdChunk.msg comment — chunk_id==0 is no longer
-  meaningful inside this node.
+Real-time: gc.disable() in main(); SHM polled every tick. busy_wait_fraction /
+systemd Nice/CPUAffinity are TODO(REQ-38).
 
 Traps:
-- estop_loco_action is a yaml string → method name. Validate with hasattr at
-  startup; a typo otherwise blows up only on the first E-STOP.
-- crossfade is CANONICAL here (2026-05-26 wire reversal). The yaml knobs
-  chunk_size / crossfade_threshold_g previously labelled "fallback path" are
-  now the live config for the canonical path — re-validate defaults when
-  wiring.
-- arm vs low routing is on joint_names — joint_name → SDK target mapping must
-  be locked in motor_params.yaml; unknown joint name in a chunk = MALFORMED.
+- estop_loco_action is a yaml string → LocoClient method; validated at startup.
+- ChannelFactory shares libddsc with rclpy → _patch_channel_factory joins the
+  existing domain (Domain() after rclpy.init raises). Mirrors imu_node.
 
-Real-time strategy:
-- gc.disable() before main loop          (TODO(REQ-38))
-- busy-wait hybrid timer (80/20) @100Hz  (TODO(REQ-38))
-- SHM polled every tick                  (TODO(REQ-35))
-- systemd CPUAffinity=1, Nice=-20
-
-TODO(REQ-34) [TASK-34]: declare params + init unitree_sdk2_python (LocoClient + rt/arm_sdk + rt/lowcmd).
-TODO(REQ-35) [TASK-34]: validate estop_loco_action at startup; open SHM safety_flag.
-TODO(REQ-34) [TASK-34]: subscribe JointCmdChunk on arm + low; loco dispatch.
-TODO(REQ-34) [TASK-34]: chunk-receipt path — detect chunk_id transition vs
-                        last seen; on transition, call crossfade(old_tail,
-                        new_chunk.steps), drop previous chunk tail, push
-                        blended sequence into joint_buf. No transition →
-                        append steps directly.
-TODO(REQ-34, REQ-38) [TASK-34]: 100 Hz control loop (busy-wait hybrid, gc.disable,
-                                 SHM poll, pop+execute, BufState publish,
-                                 empty-queue last-step republish).
-TODO(REQ-35) [TASK-34]: ESTOP path — LocoClient.<estop_loco_action>() + arm weight
-                         1.0→0.0 ramp + action_queue.flush().
-TODO(REQ-34): re-rate arm weight ramp step count for 100 Hz period.
+TBD (chunk path, unused in the velocity-only demo):
+- _on_chunk: chunk_id-transition detect → crossfade(old_tail, new) → joint_buf.
+- _dispatch_joint: pop joint_buf → rt/arm_sdk/rt/lowcmd, empty-queue last-step hold.
+- _enter_estop arm weight 1.0→0.0 ramp.
 """
+import gc
+from multiprocessing import shared_memory
+
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 
-from .action_queue import ActionQueue
-from .queue_aggregate import crossfade  # noqa: F401  (canonical chunk crossfade)
+from geometry_msgs.msg import Twist
+from g1_onboard_msgs.msg import BufState, EstopFlag, JointCmdChunk, LocoCommand
+
+import unitree_sdk2py.core.channel as _sdk_ch
+from unitree_sdk2py.core.channel import ChannelFactory
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+from .action_queue import ActionQueue, VelocityCommand
+from .queue_aggregate import crossfade  # noqa: F401  (canonical chunk crossfade, TBD)
+
+
+_RELIABLE_QOS = QoSProfile(
+    reliability=ReliabilityPolicy.RELIABLE,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=10,
+)
+
+# LocoCommand.action → LocoClient method name (verified against g1_loco_client).
+_LOCO_METHOD = {
+    LocoCommand.ACTION_DAMP:          'Damp',
+    LocoCommand.ACTION_ZERO_TORQUE:   'ZeroTorque',
+    LocoCommand.ACTION_STAND_UP:      'Lie2StandUp',   # TODO(REQ-34): confirm vs Squat2StandUp per start posture
+    LocoCommand.ACTION_BALANCE_STAND: 'BalanceStand',  # takes balance_mode arg (uses LocoCommand.param)
+    LocoCommand.ACTION_LOW_STAND:     'LowStand',
+    LocoCommand.ACTION_HIGH_STAND:    'HighStand',
+    LocoCommand.ACTION_SIT_DOWN:      'Sit',
+}
+
+
+def _patch_channel_factory() -> None:
+    """Join rclpy's existing DDS domain instead of creating one (shared libddsc).
+
+    Mirrors imu_node/joint_state_node: Domain(0) after rclpy.init() raises, so
+    ChannelFactory.Init joins via DomainParticipant. LocoClient then runs its RPC
+    channels on that participant.
+    """
+    from cyclonedds.domain import DomainParticipant as _DDP
+
+    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
+        if self.__class__._ChannelFactory__initialized:
+            return True
+        with self.__class__._ChannelFactory__init_lock:
+            if self.__class__._ChannelFactory__initialized:
+                return True
+            try:
+                self.__class__._ChannelFactory__participant = _DDP(id)
+            except Exception:
+                return False
+            self.__class__._ChannelFactory__qos = qos
+            self.__class__._ChannelFactory__initialized = True
+            return True
+
+    _sdk_ch.ChannelFactory.Init = _init
 
 
 class MotorControllerNode(Node):
     def __init__(self) -> None:
-        super().__init__('motor_controller')
-        # TODO(REQ-34) [TASK-34]: wire everything (see module docstring TODO list).
-        # NOTE: ActionQueue(slots=64) currently hard-coded; motor_params.yaml
-        # ring_buffer_slots is not read yet — keep in sync until param wiring lands.
-        self._queue = ActionQueue(slots=64)
-        self.get_logger().info('motor_controller_node started (TBD)')
+        super().__init__(
+            'motor_controller',
+            automatically_declare_parameters_from_overrides=True,
+        )
+        self._control_rate_hz: int = self.get_parameter('control_rate_hz').value
+        self._ring_slots: int = self.get_parameter('ring_buffer_slots').value
+        self._estop_loco_action: str = self.get_parameter('estop_loco_action').value
+        self._network_interface: str = self.get_parameter('network_interface').value
+        self._domain_id: int = self.get_parameter('domain_id').value
+        self._estop_shm_name: str = self.get_parameter('estop_shm_name').value
+        self._dry_run: bool = self.get_parameter('dry_run').value
+        self._buf_state_rate_hz: float = self.get_parameter('buf_state_rate_hz').value
+
+        if not hasattr(LocoClient, self._estop_loco_action):
+            raise RuntimeError(
+                f'estop_loco_action {self._estop_loco_action!r} is not a LocoClient method')
+
+        self._queue = ActionQueue(slots=self._ring_slots)
+        self._shm = self._open_shm(self._estop_shm_name)
+        self._estop_active = False
+        self._dds_estop = False
+        self._tick_count = 0
+        self._last_joint_pop_ns = 0  # set by chunk path (TBD)
+
+        self._loco = self._init_sdk()
+
+        self._buf_pub = self.create_publisher(BufState, '/onboard/motor/buf_state', _RELIABLE_QOS)
+        self.create_subscription(Twist, '/onboard/cmd/vel', self._on_cmd_vel, _RELIABLE_QOS)
+        self.create_subscription(LocoCommand, '/onboard/cmd/loco', self._on_cmd_loco, _RELIABLE_QOS)
+        self.create_subscription(EstopFlag, '/onboard/safety/estop', self._on_estop, _RELIABLE_QOS)
+        self.create_subscription(
+            JointCmdChunk, '/onboard/safety/validated_joint_chunk', self._on_chunk, _RELIABLE_QOS)
+
+        period = 1.0 / (self._control_rate_hz if self._control_rate_hz > 0 else 100)
+        self._control_period = period
+        self.create_timer(period, self._control_loop)
+        bs = self._buf_state_rate_hz if self._buf_state_rate_hz > 0 else 10.0
+        self._buf_state_period = 1.0 / bs
+        self.create_timer(self._buf_state_period, self._publish_buf_state)
+
+        self.get_logger().info(
+            f'motor_controller ready ({self._control_rate_hz}Hz, slots={self._ring_slots}, '
+            f'estop_action={self._estop_loco_action}, dry_run={self._loco is None})')
+
+    # --- setup ---LocoClient
+    def _init_sdk(self) -> LocoClient | None:
+        if self._dry_run:
+            self.get_logger().warn('dry_run=true — SDK disabled, dispatch logs only')
+            return None
+        try:
+            _patch_channel_factory()
+            ChannelFactory().Init(self._domain_id, self._network_interface)
+            loco = LocoClient()
+            loco.SetTimeout(10.0)
+            loco.Init()
+            return loco
+        except Exception as e:  # no robot / SDK error → dry-run, node stays up
+            self.get_logger().error(f'SDK init failed ({e}) — falling back to dry_run')
+            return None
+
+    def _open_shm(self, name: str) -> shared_memory.SharedMemory:
+        # safety_monitor owns this byte; create-or-attach so motor runs without it.
+        try:
+            shm = shared_memory.SharedMemory(name=name, create=False)
+        except FileNotFoundError:
+            shm = shared_memory.SharedMemory(name=name, create=True, size=1)
+            shm.buf[0] = 0
+        return shm
+
+    # --- producers (subscriptions) ---
+    def _on_cmd_vel(self, twist: Twist) -> None:
+        self._queue.push_velocity(VelocityCommand(twist=twist))
+
+    def _on_cmd_loco(self, msg: LocoCommand) -> None:
+        name = _LOCO_METHOD.get(msg.action)
+        if name is None:
+            self.get_logger().warn(f'unknown loco action {msg.action}')
+            return
+        if self._loco is None:
+            self.get_logger().info(f'[dry] loco {name}(param={msg.param})')
+            return
+        fn = getattr(self._loco, name)
+        fn(msg.param) if msg.action == LocoCommand.ACTION_BALANCE_STAND else fn()
+
+    def _on_estop(self, flag: EstopFlag) -> None:
+        self._dds_estop = flag.active  # SHM byte is the fast path; this is DDS context
+
+    def _on_chunk(self, chunk: JointCmdChunk) -> None:
+        # TODO(REQ-34) [TASK-34]: chunk path (safety_monitor) — detect chunk_id
+        # transition, crossfade(old_tail, new) on overlap, unpack steps into
+        # joint_buf. Unused in the velocity-only demo.
+        pass
+
+    # --- control loop ---
+    def _control_loop(self) -> None:
+        self._tick_count += 1
+        estop = bool(self._shm.buf[0]) or self._dds_estop
+        if estop and not self._estop_active:  # rising edge — one-shot
+            self._enter_estop()
+        self._estop_active = estop
+        if estop:
+            return
+        vc = self._queue.pop_velocity()
+        if vc is not None:
+            self._loco_move(vc.twist)
+        self._dispatch_joint()
+
+    def _loco_move(self, twist: Twist) -> None:
+        vx, vy, vyaw = twist.linear.x, twist.linear.y, twist.angular.z
+        if self._loco is None:
+            self.get_logger().info(f'[dry] Move({vx:.2f},{vy:.2f},{vyaw:.2f})')
+            return
+        self._loco.Move(vx, vy, vyaw, True)  # continuous velocity stream
+
+    def _dispatch_joint(self) -> None:
+        # TODO(REQ-34) [TASK-34]: pop joint_buf → rt/arm_sdk / rt/lowcmd publish,
+        # empty-queue last-step republish. Fed by the chunk path (TBD).
+        pass
+
+    def _enter_estop(self) -> None:
+        self._queue.flush()
+        self.get_logger().warn(f'E-STOP — flush + LocoClient.{self._estop_loco_action}()')
+        if self._loco is not None:
+            getattr(self._loco, self._estop_loco_action)()
+        # TODO(REQ-35) [TASK-34]: arm weight 1.0→0.0 ramp (arm/chunk path, TBD).
+
+    # --- telemetry ---
+    def _publish_buf_state(self) -> None:
+        vfill, jfill = self._queue.fill_ratio()
+        measured = self._tick_count / self._buf_state_period
+        self._tick_count = 0
+        msg = BufState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.velocity_fill = vfill
+        msg.joint_fill = jfill
+        msg.control_rate_hz = float(measured)
+        age_ns = self.get_clock().now().nanoseconds - self._last_joint_pop_ns
+        msg.last_cmd_age_ms = int(age_ns / 1e6) if self._last_joint_pop_ns else 0
+        msg.underrun_count = self._queue.underrun_count
+        msg.overrun_count = self._queue.overrun_count
+        self._buf_pub.publish(msg)
+
+    def destroy_node(self) -> None:
+        try:
+            self._shm.close()
+        except Exception:
+            pass
+        super().destroy_node()
 
 
 def main(args=None) -> None:
+    gc.disable()  # remove GC jitter from the 100 Hz loop (REQ-38)
     rclpy.init(args=args)
     node = MotorControllerNode()
     try:
