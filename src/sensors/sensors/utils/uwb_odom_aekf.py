@@ -75,7 +75,7 @@ class UwbOdomAEKF:
 
     # --- Process noise (Q) tuning ---
     _Q_XY_M2_PER_M: float = 0.001        # x/y 프로세스 노이즈 (m²/m) — std≈3cm/m
-    _Q_BIAS_RAD2_PER_STEP: float = 1e-6  # b_θ random walk — std≈0.057°/step
+    _Q_BIAS_RAD2_PER_STEP: float = 1e-9  # b_θ random walk — std≈0.0018°/step
 
     # --- Initial covariance (P) ---
     _P_INIT_XY_M2: float = 1.0
