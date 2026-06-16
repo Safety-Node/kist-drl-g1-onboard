@@ -5,36 +5,35 @@ Subscriptions:
 - /onboard/cmd/vel (Twist)                       → velocity_buf → LocoClient.Move
 - /onboard/cmd/loco (LocoCommand)                LocoClient FSM dispatch (no buffer)
 - /onboard/safety/estop (EstopFlag)              E-STOP DDS context
-- /onboard/safety/validated_joint_chunk (JointCmdChunk)  joint path — TBD (chunk)
+- /onboard/safety/validated_joint_chunk (JointCmdChunk)  → joint_buf → rt/arm_sdk
 - POSIX SHM byte 'safety_flag'                   zero-latency E-STOP poll
 
 Publications:
 - /onboard/motor/buf_state (BufState)            telemetry → comm_bridge → PC
 
 Dispatch:
-- VELOCITY → LocoClient.Move(vx,vy,vyaw)  (continuous walking; PC NavigationProvider)
-- LOCO     → LocoClient.<method>() from LocoCommand.action  (discrete FSM, bypasses queue)
+- VELOCITY → LocoClient.Move(vx,vy,vyaw)  (continuous walking)
+- LOCO     → LocoClient.<method>() from LocoCommand.action  (discrete FSM, no buffer)
 - ESTOP    → flush + LocoClient.<estop_loco_action>()  (SHM byte OR DDS active)
-- JOINT    → rt/arm_sdk / rt/lowcmd publish from joint_buf  — TBD (safety_monitor chunk path)
+- JOINT    → rt/arm_sdk from joint_buf (weight=motor_cmd[29].q). ARM/WAIST only
+            (idx 12-28); legs owned by LocoClient. Empty queue holds last step.
 
-E-STOP triggers (rising edge in _control_loop): SHM 'safety_flag'==1 OR EstopFlag.active.
-Both are set by safety_monitor; this node only honours them (no internal estop logic).
+E-STOP triggers (rising edge): SHM 'safety_flag'==1 OR EstopFlag.active — both set
+by safety_monitor; this node only honours them (no internal estop logic).
 
-dry_run / SDK: _init_sdk falls back to dry_run (log-only) if dry_run=true or the SDK
-fails to connect, so the node runs on the bench without a robot.
-
-Real-time: gc.disable() in main(); SHM polled every tick. busy_wait_fraction /
-systemd Nice/CPUAffinity are TODO(REQ-38).
+dry_run / SDK: _init_sdk falls back to log-only if dry_run or SDK fails. arm_sdk
+init is isolated — its failure disables the arm path but never LocoClient.
 
 Traps:
 - estop_loco_action is a yaml string → LocoClient method; validated at startup.
-- ChannelFactory shares libddsc with rclpy → _patch_channel_factory joins the
-  existing domain (Domain() after rclpy.init raises). Mirrors imu_node.
+- _patch_channel_factory joins rclpy's domain (shared libddsc). network_interface
+  is ignored by the patch — robot link decided by cyclonedds.xml.
 
-TBD (chunk path, unused in the velocity-only demo):
-- _on_chunk: chunk_id-transition detect → crossfade(old_tail, new) → joint_buf.
-- _dispatch_joint: pop joint_buf → rt/arm_sdk/rt/lowcmd, empty-queue last-step hold.
-- _enter_estop arm weight 1.0→0.0 ramp.
+TODO (not needed for the velocity + fixed-arm demo; see Notion tasks):
+- [A] chunk crossfade (chunk_id transition) + arm weight ramp (0↔1, ~2 s).
+- [B] busy-wait 100 Hz timer + systemd unit (CPUAffinity/Nice/Restart/MEMLOCK).
+- [C] rt/lowcmd (low/whole-body) path — arm_sdk only for now.
+- [D] HW-integration checks (tick jitter, ramp timing, overflow, typo-raise).
 """
 import gc
 from multiprocessing import shared_memory
@@ -47,10 +46,13 @@ from geometry_msgs.msg import Twist
 from g1_onboard_msgs.msg import BufState, EstopFlag, JointCmdChunk, LocoCommand
 
 import unitree_sdk2py.core.channel as _sdk_ch
-from unitree_sdk2py.core.channel import ChannelFactory
+from unitree_sdk2py.core.channel import ChannelFactory, ChannelPublisher
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.utils.crc import CRC
 
-from .action_queue import ActionQueue, VelocityCommand
+from .action_queue import ActionQueue, JointCommand, VelocityCommand
 from .queue_aggregate import crossfade  # noqa: F401  (canonical chunk crossfade, TBD)
 
 
@@ -70,6 +72,22 @@ _LOCO_METHOD = {
     LocoCommand.ACTION_HIGH_STAND:    'HighStand',
     LocoCommand.ACTION_SIT_DOWN:      'Sit',
 }
+
+# G1 29-DOF joint name → motor index (matches sensors joint_state_node order +
+# unitree_sdk2py G1JointIndex). rt/arm_sdk uses motor_cmd[29].q as the blend weight.
+_G1_JOINT_INDEX = {
+    'left_hip_pitch': 0, 'left_hip_roll': 1, 'left_hip_yaw': 2, 'left_knee': 3,
+    'left_ankle_pitch': 4, 'left_ankle_roll': 5,
+    'right_hip_pitch': 6, 'right_hip_roll': 7, 'right_hip_yaw': 8, 'right_knee': 9,
+    'right_ankle_pitch': 10, 'right_ankle_roll': 11,
+    'waist_yaw': 12, 'waist_roll': 13, 'waist_pitch': 14,
+    'left_shoulder_pitch': 15, 'left_shoulder_roll': 16, 'left_shoulder_yaw': 17,
+    'left_elbow': 18, 'left_wrist_roll': 19, 'left_wrist_pitch': 20, 'left_wrist_yaw': 21,
+    'right_shoulder_pitch': 22, 'right_shoulder_roll': 23, 'right_shoulder_yaw': 24,
+    'right_elbow': 25, 'right_wrist_roll': 26, 'right_wrist_pitch': 27, 'right_wrist_yaw': 28,
+}
+_ARM_SDK_WEIGHT_IDX = 29              # kNotUsedJoint — motor_cmd[29].q = enable/blend weight
+_ARM_SDK_INDICES = set(range(12, 29))  # waist + both arms; legs (0-11) owned by LocoClient
 
 
 def _patch_channel_factory() -> None:
@@ -122,7 +140,11 @@ class MotorControllerNode(Node):
         self._estop_active = False
         self._dds_estop = False
         self._tick_count = 0
-        self._last_joint_pop_ns = 0  # set by chunk path (TBD)
+        self._last_joint_pop_ns = 0
+        self._arm_pub = None      # rt/arm_sdk ChannelPublisher (None in dry-run / on failure)
+        self._arm_cmd = None      # persistent LowCmd_ reused each write
+        self._crc = None
+        self._last_joint = None   # last popped JointCommand (underflow hold)
 
         self._loco = self._init_sdk()
 
@@ -144,7 +166,7 @@ class MotorControllerNode(Node):
             f'motor_controller ready ({self._control_rate_hz}Hz, slots={self._ring_slots}, '
             f'estop_action={self._estop_loco_action}, dry_run={self._loco is None})')
 
-    # --- setup ---LocoClient
+    # --- setup ---
     def _init_sdk(self) -> LocoClient | None:
         if self._dry_run:
             self.get_logger().warn('dry_run=true — SDK disabled, dispatch logs only')
@@ -155,10 +177,19 @@ class MotorControllerNode(Node):
             loco = LocoClient()
             loco.SetTimeout(10.0)
             loco.Init()
-            return loco
         except Exception as e:  # no robot / SDK error → dry-run, node stays up
             self.get_logger().error(f'SDK init failed ({e}) — falling back to dry_run')
             return None
+        # arm_sdk publisher — isolated so its failure never disables LocoClient.
+        try:
+            self._arm_pub = ChannelPublisher('rt/arm_sdk', LowCmd_)
+            self._arm_pub.Init()
+            self._arm_cmd = unitree_hg_msg_dds__LowCmd_()
+            self._crc = CRC()
+        except Exception as e:
+            self._arm_pub = None
+            self.get_logger().error(f'arm_sdk init failed ({e}) — arm joint path disabled, loco OK')
+        return loco
 
     def _open_shm(self, name: str) -> shared_memory.SharedMemory:
         # safety_monitor owns this byte; create-or-attach so motor runs without it.
@@ -188,10 +219,10 @@ class MotorControllerNode(Node):
         self._dds_estop = flag.active  # SHM byte is the fast path; this is DDS context
 
     def _on_chunk(self, chunk: JointCmdChunk) -> None:
-        # TODO(REQ-34) [TASK-34]: chunk path (safety_monitor) — detect chunk_id
-        # transition, crossfade(old_tail, new) on overlap, unpack steps into
-        # joint_buf. Unused in the velocity-only demo.
-        pass
+        # Unpack steps into joint_buf; control loop paces them to rt/arm_sdk at 100 Hz.
+        # TODO(REQ-34) [TASK-34]: chunk_id-transition crossfade (TBD) — simple append for now.
+        for step in chunk.steps:
+            self._queue.push_joint(JointCommand(joint=step))
 
     # --- control loop ---
     def _control_loop(self) -> None:
@@ -215,16 +246,46 @@ class MotorControllerNode(Node):
         self._loco.Move(vx, vy, vyaw, True)  # continuous velocity stream
 
     def _dispatch_joint(self) -> None:
-        # TODO(REQ-34) [TASK-34]: pop joint_buf → rt/arm_sdk / rt/lowcmd publish,
-        # empty-queue last-step republish. Fed by the chunk path (TBD).
-        pass
+        jc = self._queue.pop_joint()
+        if jc is not None:
+            self._last_joint = jc
+            self._last_joint_pop_ns = self.get_clock().now().nanoseconds
+        else:
+            jc = self._last_joint  # underflow — hold last step
+        if jc is None:
+            return  # no arm command yet → arm_sdk stays silent, LocoClient owns the arm
+        self._publish_arm(jc.joint)
+
+    def _publish_arm(self, cmd) -> None:
+        # arm joints only (waist + arms); legs skipped — LocoClient owns them.
+        if self._arm_pub is None:  # dry-run / arm disabled — log the mapping
+            mapped = [(n, _G1_JOINT_INDEX.get(n), round(q, 3))
+                      for n, q in zip(cmd.joint_names, cmd.q)
+                      if _G1_JOINT_INDEX.get(n) in _ARM_SDK_INDICES]
+            self.get_logger().info(f'[dry] arm_sdk weight={cmd.weight:.2f} {mapped}')
+            return
+        self._arm_cmd.motor_cmd[_ARM_SDK_WEIGHT_IDX].q = float(cmd.weight)  # enable/blend
+        for i, name in enumerate(cmd.joint_names):
+            idx = _G1_JOINT_INDEX.get(name)
+            if idx not in _ARM_SDK_INDICES:
+                continue  # unknown or leg joint — skip (loco owns legs)
+            m = self._arm_cmd.motor_cmd[idx]
+            m.q = float(cmd.q[i]); m.dq = float(cmd.dq[i])
+            m.kp = float(cmd.kp[i]); m.kd = float(cmd.kd[i]); m.tau = float(cmd.tau_ff[i])
+        self._arm_cmd.crc = self._crc.Crc(self._arm_cmd)
+        self._arm_pub.Write(self._arm_cmd)
 
     def _enter_estop(self) -> None:
         self._queue.flush()
+        self._last_joint = None
         self.get_logger().warn(f'E-STOP — flush + LocoClient.{self._estop_loco_action}()')
         if self._loco is not None:
             getattr(self._loco, self._estop_loco_action)()
-        # TODO(REQ-35) [TASK-34]: arm weight 1.0→0.0 ramp (arm/chunk path, TBD).
+        # Release arm_sdk (weight→0) so LocoClient reclaims the arm. (1→0 ramp = TBD)
+        if self._arm_pub is not None:
+            self._arm_cmd.motor_cmd[_ARM_SDK_WEIGHT_IDX].q = 0.0
+            self._arm_cmd.crc = self._crc.Crc(self._arm_cmd)
+            self._arm_pub.Write(self._arm_cmd)
 
     # --- telemetry ---
     def _publish_buf_state(self) -> None:

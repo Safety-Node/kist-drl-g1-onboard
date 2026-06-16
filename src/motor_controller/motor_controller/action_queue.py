@@ -68,10 +68,16 @@ class ActionQueue:
             return None
 
     def push_joint(self, cmd: JointCommand) -> None:
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: push_joint (chunk path)')
+        if len(self._joint_buf) == self._slots:
+            self._joint_overrun_count += 1  # deque(maxlen) drops oldest
+        self._joint_buf.append(cmd)
 
     def pop_joint(self) -> JointCommand | None:
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: pop_joint (chunk path)')
+        # Empty → caller holds last step (underflow); not counted here.
+        try:
+            return self._joint_buf.popleft()
+        except IndexError:
+            return None
 
     def flush(self) -> None:
         """E-STOP path: drop every pending command (counters untouched)."""
