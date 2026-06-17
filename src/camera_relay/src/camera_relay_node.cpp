@@ -183,13 +183,13 @@ int main(int argc, char ** argv)
     // DIAG: color subscription temporarily disabled to isolate whether
     // realsense2_camera's JPEG encoding blocks the depth alignment thread.
     // Both callbacks return immediately — executor is never stalled.
-    // auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
-    //     "/onboard/sensors/camera/color/image_raw/compressed", qos,
-    //     [&](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
-    //         std::lock_guard<std::mutex> lk(color_mtx);
-    //         pending_color = std::move(msg);
-    //         color_cv.notify_one();
-    //     });
+    auto sub_color = node_sub->create_subscription<sensor_msgs::msg::CompressedImage>(
+        "/onboard/sensors/camera/color/image_raw/compressed", qos,
+        [&](sensor_msgs::msg::CompressedImage::UniquePtr msg) {
+            std::lock_guard<std::mutex> lk(color_mtx);
+            pending_color = std::move(msg);
+            color_cv.notify_one();
+        });
 
     // Diagnostic: distinguish SDK frame drop vs DDS/ROS delivery lag.
     //   stamp_gap  = header.stamp interval → camera SDK dropped a frame if > 50ms
@@ -199,7 +199,7 @@ int main(int argc, char ** argv)
     // DIAG: switched to raw (non-aligned) depth to check if align_depth is the bottleneck.
     // If SDK-DROP disappears here → align_depth computation is causing the 100ms gaps.
     auto sub_depth = node_sub->create_subscription<sensor_msgs::msg::Image>(
-        "/onboard/sensors/camera/depth/image_rect_raw", qos,
+        "/onboard/sensors/camera/aligned_depth_to_color/image_raw", qos,
         [&, last_depth_stamp_ns, last_depth_cb](sensor_msgs::msg::Image::UniquePtr msg) {
             auto now      = std::chrono::steady_clock::now();
             int64_t stamp = rclcpp::Time(msg->header.stamp).nanoseconds();
