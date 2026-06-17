@@ -22,6 +22,9 @@ Checks:
   chunk boundary is motor_controller crossfade's job).
 - comms watchdog (loop): cmd/arm, cmd/low silent past per-stream timeout (armed
   on first message) → REASON_COMMS_TIMEOUT.
+- state-stream staleness (loop): joint_states (+ depth when proximity_enable)
+  silent past state_staleness_timeout_s → sensor node died → REASON_COMMS_TIMEOUT.
+  Same watchdog mechanism as comms; armed on first message.
 - self-watchdog (loop): loop interval > loop_overrun_factor*period → REASON_WATCHDOG.
 - proximity (depth, opt-in): close depth pixels in the front ROI exceed threshold
   → REASON_PROXIMITY. Off unless proximity_enable.
@@ -45,7 +48,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, JointState
 
 from g1_onboard_msgs.msg import EstopFlag, JointCmd, JointCmdChunk
 
@@ -88,6 +91,8 @@ class SafetyMonitorNode(Node):
         self._proximity_roi_frac: float = self.get_parameter('proximity_roi_frac').value
         self._depth_topic: str = self.get_parameter('depth_topic').value
         self._joint_rate_limit: float = self.get_parameter('joint_rate_of_change_limit').value
+        self._joint_states_topic: str = self.get_parameter('joint_states_topic').value
+        self._state_staleness_timeout_s: float = self.get_parameter('state_staleness_timeout_s').value
 
         # joint_limits: {name: (q_min, q_max, dq_max, tau_max)}
         self._joint_limits: dict[str, tuple[float, float, float, float]] = {
@@ -100,11 +105,12 @@ class SafetyMonitorNode(Node):
         self._estop_detail = ''
         self._shm = self._open_shm(self._estop_shm_name)
 
-        # comms watchdog: stream → last-rx seconds (key present == armed).
+        # comms + state-stream watchdog: stream → last-rx seconds (key present == armed).
         self._last_rx: dict[str, float] = {}
         self._stream_timeout = {
             'arm': self._cmd_arm_timeout_s,
             'low': self._cmd_low_timeout_s,
+            'joint_states': self._state_staleness_timeout_s,
         }
         self._last_loop_s: float | None = None
 
@@ -116,7 +122,10 @@ class SafetyMonitorNode(Node):
             JointCmdChunk, '/onboard/cmd/arm', lambda m: self._on_chunk(m, 'arm'), _RELIABLE_QOS)
         self.create_subscription(
             JointCmdChunk, '/onboard/cmd/low', lambda m: self._on_chunk(m, 'low'), _RELIABLE_QOS)
+        self.create_subscription(
+            JointState, self._joint_states_topic, self._on_joint_states, _BEST_EFFORT_QOS)
         if self._proximity_enable:
+            self._stream_timeout['depth'] = self._state_staleness_timeout_s
             self.create_subscription(Image, self._depth_topic, self._on_depth, _BEST_EFFORT_QOS)
 
         rate = self._loop_rate_hz if self._loop_rate_hz > 0 else 100
@@ -214,7 +223,11 @@ class SafetyMonitorNode(Node):
                 return name, q - prev_q[name]
         return None
 
+    def _on_joint_states(self, msg: JointState) -> None:
+        self._last_rx['joint_states'] = self._now_s()  # liveness only; staleness in _loop
+
     def _on_depth(self, img: Image) -> None:
+        self._last_rx['depth'] = self._now_s()  # liveness (armed) + proximity below
         if self._estop_active:
             return
         if img.encoding not in ('16UC1', 'mono16'):
