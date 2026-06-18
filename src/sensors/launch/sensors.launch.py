@@ -205,6 +205,24 @@ def generate_launch_description():
         parameters=[params_file],
     )
 
+    # [TASK-53]
+    obstacle_map_node = Node(
+        package='sensors',
+        executable='obstacle_map_node',
+        name='obstacle_map_node',
+        output='screen',
+        parameters=[params_file],
+    )
+
+    # [TASK-52]
+    lidar_node = Node(
+        package='sensors',
+        executable='lidar_node',
+        name='lidar_node',
+        output='screen',
+        parameters=[params_file],
+    )
+
     return LaunchDescription([
         *external_nodes,
         mic_node,
@@ -214,4 +232,6 @@ def generate_launch_description():
         uwb_node,
         odom_node,
         location_node,
+        lidar_node,
+        obstacle_map_node,
     ])

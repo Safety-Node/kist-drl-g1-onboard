@@ -56,20 +56,27 @@ class ActionQueue:
         self._underrun_count: int = 0
 
     def push_velocity(self, cmd: VelocityCommand) -> None:
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: push_velocity')
+        if len(self._velocity_buf) == self._slots:
+            self._velocity_overrun_count += 1  # deque(maxlen) drops oldest
+        self._velocity_buf.append(cmd)
 
     def pop_velocity(self) -> VelocityCommand | None:
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: pop_velocity')
+        # Empty velocity_buf is idle (stand still), not an underrun — don't count.
+        try:
+            return self._velocity_buf.popleft()
+        except IndexError:
+            return None
 
     def push_joint(self, cmd: JointCommand) -> None:
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: push_joint')
+        raise NotImplementedError('TODO(REQ-34) [TASK-34]: push_joint (chunk path)')
 
     def pop_joint(self) -> JointCommand | None:
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: pop_joint')
+        raise NotImplementedError('TODO(REQ-34) [TASK-34]: pop_joint (chunk path)')
 
     def flush(self) -> None:
-        """E-STOP path: drop every pending command atomically (counters untouched)."""
-        raise NotImplementedError('TODO(REQ-34) [TASK-34]: flush')
+        """E-STOP path: drop every pending command (counters untouched)."""
+        self._velocity_buf.clear()
+        self._joint_buf.clear()
 
     def fill_ratio(self) -> tuple[float, float]:
         return (

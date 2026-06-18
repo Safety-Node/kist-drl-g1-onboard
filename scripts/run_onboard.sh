@@ -24,9 +24,15 @@ export DDS_PEER_IP=${DDS_PEER_IP:-192.168.123.222}
 
 declare -a PIDS=()
 
-# Kill any leftover node processes from a previous run.
-pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller\|realsense2_camera\|rs_launch" 2>/dev/null || true
-sleep 0.5
+# Kill any leftover node processes from a previous run and wait for them to exit.
+_NODE_PATTERN="uwb_node|imu_node|joint_state_node|lidar_node|odom_node|location_node|mic_node|speaker_node|comm_bridge_node|safety_monitor|motor_controller|realsense2_camera|rs_launch"
+pkill -f "$_NODE_PATTERN" 2>/dev/null || true
+for _i in $(seq 1 10); do
+  pgrep -f "$_NODE_PATTERN" > /dev/null 2>&1 || break
+  sleep 0.5
+done
+pkill -9 -f "$_NODE_PATTERN" 2>/dev/null || true
+unset _NODE_PATTERN _i
 
 cleanup() {
   echo "[run_onboard.sh] stopping…"
@@ -42,7 +48,7 @@ cleanup() {
   done
   # Wait a moment then force-kill any stragglers (camera already handled above).
   sleep 1
-  pkill -f "uwb_node\|imu_node\|comm_bridge_node\|safety_monitor\|motor_controller" 2>/dev/null || true
+  pkill -f "uwb_node|imu_node|joint_state_node|lidar_node|odom_node|location_node|mic_node|speaker_node|comm_bridge_node|safety_monitor|motor_controller" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

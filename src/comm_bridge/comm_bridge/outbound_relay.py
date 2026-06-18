@@ -14,9 +14,13 @@ releasing the DDS SHM segment at once. A separate thread calls pub.publish() so
 slow domain-1 publishes (e.g. 1.8 MB depth at 30 Hz) never hold the domain-0
 SHM port and cannot stall the camera publisher or other subscribers.
 
-QoS "stream": BEST_EFFORT + depth=10 for continuous audio — absorbs brief
-scheduler jitter without accumulating stale frames (50 Hz drains the queue
-in 200 ms). Large-image topics keep depth=1 ("freshness wins").
+QoS "stream": BEST_EFFORT + depth=10 on the domain-0 subscriber (onboard-local,
+low-loss IPC). The domain-1 publisher (network-facing) defaults to the same QoS
+unless overridden by "qos_pub" in the yaml entry. Use qos_pub: reliable for
+continuous streams (e.g. audio_pcm) that must survive WiFi/Ethernet packet loss —
+BEST_EFFORT over UDP gives no retransmission, causing intermittent frame gaps.
+
+Large-image topics keep depth=1 ("freshness wins").
 
 Loads comm_bridge_params.yaml directly from the package share directory
 (yaml.safe_load). List-of-dict relay entries cannot be expressed as ROS 2
@@ -112,7 +116,8 @@ def main(args=None) -> None:
         src = entry["src"]
         dst = entry["dst"]
         type_str = entry["type"]
-        qos_key = entry.get("qos", "best_effort")
+        qos_sub_key = entry.get("qos", "best_effort")
+        qos_pub_key = entry.get("qos_pub", qos_sub_key)
 
         try:
             msg_cls = _load_msg_class(type_str)
@@ -120,13 +125,18 @@ def main(args=None) -> None:
             logger.error(f"Cannot import {type_str}: {e} — skipping {src}")
             continue
 
-        qos = _QOS_MAP.get(qos_key)
-        if qos is None:
-            logger.warn(f"Unknown qos {qos_key!r} for {src} — falling back to best_effort")
-            qos = _QOS_MAP["best_effort"]
+        qos_sub = _QOS_MAP.get(qos_sub_key)
+        if qos_sub is None:
+            logger.warn(f"Unknown qos {qos_sub_key!r} for {src} — falling back to best_effort")
+            qos_sub = _QOS_MAP["best_effort"]
 
-        # publisher lives on domain 1 (workstation-visible)
-        pub = node_bridge.create_publisher(msg_cls, dst, qos)
+        qos_pub = _QOS_MAP.get(qos_pub_key)
+        if qos_pub is None:
+            logger.warn(f"Unknown qos_pub {qos_pub_key!r} for {dst} — falling back to best_effort")
+            qos_pub = _QOS_MAP["best_effort"]
+
+        # publisher lives on domain 1 (workstation-visible, network-facing)
+        pub = node_bridge.create_publisher(msg_cls, dst, qos_pub)
 
         # Each relay gets its own queue + publish thread so domain-0 callbacks
         # return immediately (releasing SHM) and domain-1 publishes happen async.
@@ -146,14 +156,18 @@ def main(args=None) -> None:
                     p.publish(msg)
             return threading.Thread(target=_run, daemon=True, name=name)
 
-        sub = node_onboard.create_subscription(msg_cls, src, _make_cb(q), qos)
+        # subscriber on domain 0; callback only enqueues (q.put), publish is async
+        sub = node_onboard.create_subscription(msg_cls, src, _make_cb(q), qos_sub)
         t = _make_pub_thread(q, pub, f"pub_{dst.split('/')[-1]}")
         t.start()
 
         _refs.append((sub, pub))
         _queues.append(q)
         _pub_threads.append(t)
-        logger.info(f"relay  {src}  →  {dst}  [{qos_key}]")
+        if qos_pub_key != qos_sub_key:
+            logger.info(f"relay  {src}  →  {dst}  [sub={qos_sub_key} pub={qos_pub_key}]")
+        else:
+            logger.info(f"relay  {src}  →  {dst}  [{qos_sub_key}]")
         count += 1
 
     logger.info(
