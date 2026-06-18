@@ -40,7 +40,8 @@ outbound_relay:
       - src:  "/onboard/sensors/audio/pcm"
         dst:  "/bridge/sensors/audio_pcm"
         type: "g1_onboard_msgs/msg/AudioPCM"
-        qos:  "stream"
+        qos:     "stream"    # domain-0 sub: BEST_EFFORT depth=10 (onboard-local IPC)
+        qos_pub: "reliable"  # domain-1 pub: RELIABLE (network-facing, prevents WiFi UDP drops)
       - src:  "/onboard/sensors/joint_states"
         dst:  "/bridge/sensors/joint_states"
         type: "sensor_msgs/msg/JointState"
