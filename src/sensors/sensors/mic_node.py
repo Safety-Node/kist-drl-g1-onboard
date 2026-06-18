@@ -119,7 +119,11 @@ class MicNode(Node):
         mreq = struct.pack('=4s4s', socket.inet_aton(self._group_ip),
                            socket.inet_aton(self._iface_ip))
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        sock.settimeout(self._chunk_sec)
+        # 2x chunk period: PC1 sends at ~50 Hz (20 ms), so a real packet always
+        # arrives well within 40 ms. Timeout only fires during genuine pauses,
+        # preventing the race where a 20 ms timeout fires just before the next
+        # packet and emits a spurious silence frame every cycle.
+        sock.settimeout(self._chunk_sec * 2)
         return sock
 
     # -------------------------------------------------------------------
