@@ -5,9 +5,10 @@
   <version>0.0.1</version>
   <description>
     Onboard sensor publishers for Unitree G1: Camera (RealSense D435i), IMU, Microphone array,
-    Speaker playback, Joint State, UWB pose, and LiDAR point cloud.
-    Reuses realsense2_camera as an external C++ driver; custom Python nodes handle audio (ALSA),
-    joint_state (G1 SDK), UWB (vendor SDK), and LiDAR (G1 SDK utlidar/cloud).
+    Speaker playback, Joint State, and UWB pose.
+    LiDAR has been removed (replaced by UWB absolute localisation).
+    Reuses realsense2_camera as an external C++ driver; custom Python nodes handle mic capture (ALSA),
+    speaker playback (Unitree SDK AudioClient), joint_state (G1 SDK), and UWB (vendor SDK).
   </description>
   <maintainer email="park50260@gmail.com">박성용</maintainer>
   <license>Apache-2.0</license>
