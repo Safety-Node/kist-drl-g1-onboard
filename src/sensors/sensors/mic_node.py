@@ -10,6 +10,7 @@ g1_data_transport_차이: mic = UDP side-channel, speaker = SDK PlayStream RPC).
 Trap: channels=1 mono is intentional (G1 4-mic mix-down — see TASK-31).
 Trap: needs 'Wake-up Conversation Mode' ON in the Unitree app or the robot sends
       NO packets — recv just times out. Timeout is logged, NOT fatal (keep spinning).
+      During timeouts silence frames are published to maintain the 50 Hz stream.
 Trap: iface_ip is the *onboard NIC IP* on the 192.168.123.x net (multicast join),
       NOT a NIC name. (speaker_node uses a NIC *name* for the SDK — asymmetry.)
 Trap: publishes /onboard/sensors/audio/pcm (NOT /onboard/audio/... — mic/speaker
@@ -18,6 +19,7 @@ Trap: publishes /onboard/sensors/audio/pcm (NOT /onboard/audio/... — mic/speak
 import socket
 import struct
 import threading
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -57,7 +59,6 @@ class MicNode(Node):
         self.declare_parameter('channels', AudioPCM.CHANNELS)         # LOCKED (mono)
         self.declare_parameter('chunk_ms', 20)               # re-packetise to fixed chunks
         self.declare_parameter('recv_buf_bytes', 65536)
-        self.declare_parameter('socket_timeout_sec', 5.0)
 
         self._group_ip: str = self.get_parameter('group_ip').value
         self._port: int = int(self.get_parameter('port').value)
@@ -66,7 +67,8 @@ class MicNode(Node):
         self._channels: int = int(self.get_parameter('channels').value)
         chunk_ms: int = int(self.get_parameter('chunk_ms').value)
         self._recv_buf: int = int(self.get_parameter('recv_buf_bytes').value)
-        self._timeout: float = float(self.get_parameter('socket_timeout_sec').value)
+        # Socket timeout = one chunk period so the silence-fill loop stays in sync.
+        self._chunk_sec: float = chunk_ms / 1000.0
 
         if (self._sample_rate != AudioPCM.SAMPLE_RATE
                 or self._channels != AudioPCM.CHANNELS):
@@ -117,23 +119,32 @@ class MicNode(Node):
         mreq = struct.pack('=4s4s', socket.inet_aton(self._group_ip),
                            socket.inet_aton(self._iface_ip))
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        sock.settimeout(self._timeout)
+        sock.settimeout(self._chunk_sec)
         return sock
 
     # -------------------------------------------------------------------
     # Capture thread: recv → re-packetise → publish
     # -------------------------------------------------------------------
     def _capture_loop(self) -> None:
+        silence = bytes(self._chunk_bytes)   # zero-filled frame for gap fill
         buf = bytearray()
+        next_emit = time.monotonic() + self._chunk_sec
+
         while self._running:
             try:
                 data, _ = self._sock.recvfrom(self._recv_buf)
             except socket.timeout:
-                if not self._warned_timeout:
-                    self.get_logger().warn(
-                        "No mic packets — enable 'Wake-up Conversation Mode' in the "
-                        "Unitree app and check iface_ip / multicast join. Still waiting...")
-                    self._warned_timeout = True
+                # PC1 paused — fill silence to keep the 50 Hz stream alive.
+                # Use a while loop to catch up if OS delayed the timeout.
+                now = time.monotonic()
+                while now >= next_emit:
+                    if not self._warned_timeout:
+                        self.get_logger().warn(
+                            "No mic packets — enable 'Wake-up Conversation Mode' in the "
+                            "Unitree app and check iface_ip / multicast join. Filling silence...")
+                        self._warned_timeout = True
+                    self._publish(silence)
+                    next_emit += self._chunk_sec
                 continue
             except OSError:
                 # socket closed during shutdown → exit cleanly
@@ -149,6 +160,7 @@ class MicNode(Node):
                 chunk = bytes(buf[:self._chunk_bytes])
                 del buf[:self._chunk_bytes]
                 self._publish(chunk)
+            next_emit = time.monotonic() + self._chunk_sec
 
     def _publish(self, pcm: bytes) -> None:
         msg = AudioPCM()
