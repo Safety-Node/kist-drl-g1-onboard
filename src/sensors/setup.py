@@ -16,7 +16,7 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
-    install_requires=['setuptools', 'pyserial'],
+    install_requires=['setuptools', 'pyserial', 'sounddevice', 'scipy'],
     zip_safe=True,
     maintainer='박성용',
     maintainer_email='park50260@gmail.com',
@@ -31,6 +31,9 @@ setup(
             'imu_node         = sensors.imu_node:main',
             'uwb_node         = sensors.uwb_node:main',
             'odom_node        = sensors.odom_node:main',
+            'location_node    = sensors.location_node:main',
+            'lidar_node        = sensors.lidar_node:main',
+            'obstacle_map_node = sensors.obstacle_map_node:main',
         ],
     },
 )

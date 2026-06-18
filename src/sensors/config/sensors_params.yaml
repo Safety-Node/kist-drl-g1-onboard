@@ -2,18 +2,15 @@
 # TODO(REQ-42): fill real values once HW driver wrappers are integrated.
 
 # [TASK-31] mic capture (Onboard → STT). LOCKED 16 kHz / 16-bit / mono pipeline.
-# Source is UDP multicast from the robot audio service (PC1), NOT a local ALSA
-# device (G1 4-mic array is owned by the robot — see g1_data_transport_차이).
+# Source is reSpeaker XVF3800 ALSA device (NX card 2: Array), captured directly
+# via sounddevice. Bypasses PC1 UDP multicast whose vui_service VAD cut the
+# stream after each utterance (see TASK-43).
 mic_node:
   ros__parameters:
-    group_ip: "239.168.123.161"   # robot PC1 multicast group
-    port: 5555
-    iface_ip: "192.168.123.164"    # TBD: onboard NIC IP on 192.168.123.x (multicast join)
+    device: "Array"               # reSpeaker XVF3800 ALSA substring match (card 2)
     sample_rate: 16000            # LOCKED — AudioPCM.msg pipeline format
-    channels: 1                   # mono — intentional G1 4-mic mix-down (see TASK-31)
-    chunk_ms: 20                  # re-packetise UDP payloads → 20 ms (640 byte) chunks
-    recv_buf_bytes: 65536
-    socket_timeout_sec: 5.0       # recv timeout; logs hint (not fatal) if no packets
+    channels: 1                   # mono — intentional (LOCKED pipeline — see TASK-31)
+    chunk_ms: 20                  # 20 ms → 320 samples / 640 bytes per chunk
 
 # [TASK-36] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
 # Playback is via Unitree SDK AudioClient (not ALSA) — PCM is sent to the robot
@@ -25,14 +22,45 @@ speaker_node:
     app_name: "speaker_node"      # AudioClient PlayStream application id
     max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
-# [TASK-37] G1 SDK lowstate → JointState publisher.
-# 2026-05-23 refactor: base IMU moved out (now in imu_node). This node only
-# owns /onboard/sensors/joint_states.
 joint_state_node:
   ros__parameters:
     publish_rate_hz: 100
-    network_interface: "eth0"     # TBD: confirm NX↔G1 LAN interface
-    domain_id: 0                  # TBD: pin to SDK-specific domain, distinct from ROS 2 (see TASK-32)
+    domain_id: 0                  # must match ROS domain (SDK joins it); domain 0 shared by design
+    joint_names:
+      # Left leg (0-5)
+      - left_hip_pitch        # 0
+      - left_hip_roll         # 1
+      - left_hip_yaw          # 2
+      - left_knee             # 3
+      - left_ankle_pitch      # 4   (= left_ankle_b in AB mode)
+      - left_ankle_roll       # 5   (= left_ankle_a in AB mode)
+      # Right leg (6-11)
+      - right_hip_pitch       # 6
+      - right_hip_roll        # 7
+      - right_hip_yaw         # 8
+      - right_knee            # 9
+      - right_ankle_pitch     # 10  (= right_ankle_b)
+      - right_ankle_roll      # 11  (= right_ankle_a)
+      # Waist (12-14)
+      - waist_yaw             # 12
+      - waist_roll            # 13  (locked on 29-DoF/23-DoF)
+      - waist_pitch           # 14  (locked on 29-DoF/23-DoF)
+      # Left arm (15-21)
+      - left_shoulder_pitch   # 15
+      - left_shoulder_roll    # 16
+      - left_shoulder_yaw     # 17
+      - left_elbow            # 18
+      - left_wrist_roll       # 19
+      - left_wrist_pitch      # 20  (locked on 23-DoF)
+      - left_wrist_yaw        # 21  (locked on 23-DoF)
+      # Right arm (22-28)
+      - right_shoulder_pitch  # 22
+      - right_shoulder_roll   # 23
+      - right_shoulder_yaw    # 24
+      - right_elbow           # 25
+      - right_wrist_roll      # 26
+      - right_wrist_pitch     # 27  (locked on 23-DoF)
+      - right_wrist_yaw       # 28  (locked on 23-DoF)
 
 # [TASK-38] IMU streaming — base + ankle L/R (single owner since 2026-05-23 refactor;
 # reverses 2026-05-15 fan-out via joint_state_node).
@@ -44,7 +72,6 @@ imu_node:
     imu_base_frame_id:        "base_link"
     imu_ankle_left_frame_id:  "ankle_left_link"
     imu_ankle_right_frame_id: "ankle_right_link"
-    network_interface: "eth0"   # NX↔G1 LAN interface (same as joint_state_node)
     domain_id: 0                # G1 SDK DDS domain (isolated from ROS 2 bridge domain)
     # Ankle IMU source TBD (REQ-42). Placeholder published until KIST/SDK confirms
     # whether G1 exposes ankle IMU natively or requires FK derivation.
@@ -80,3 +107,36 @@ odom_node:
     source_topic: "/dog_odom"
     frame_id: "odom"
     child_frame_id: "robot_center"
+
+# [TASK-52] Unitree G1 built-in LiDAR point cloud relay (Livox Mid-360).
+# Relays /utlidar/cloud_livox_mid360 → /onboard/sensors/lidar/points.
+lidar_node:
+  ros__parameters:
+    source_topic: "/utlidar/cloud_livox_mid360"
+    frame_id: "utlidar_lidar"
+
+# [TASK-53] LiDAR 기반 2D 장애물 맵 (고정 공간 격자 → OccupancyGrid).
+obstacle_map_node:
+  ros__parameters:
+    x_min: 0.0
+    x_max: 8.18
+    y_min: 0.0
+    y_max: 6.69
+    resolution: 0.05        # m — 격자 간격
+    z_min:  0.0             # m — 하한 (음수는 노이즈 제외)
+    z_max:  1.1             # m — 바닥(+1.2m) 직전 상한
+    obstacle_radius: 0.15   # m — 장애물 판정 반경
+    robot_radius: 0.5       # m — 로봇 근접 포인트 제외 반경 (LiDAR 로컬 XY 기준)
+    lidar_offset_x: 0.0     # m — LiDAR 장착 오프셋 (G1 head 정중앙 → 0)
+    lidar_offset_y: 0.0     # m
+    mirror_y: true          # LiDAR 180° 반전 장착 시 Y축 반전 (Z 반전은 z_min/z_max로 처리)
+    frame_id: "map"
+
+# [TASK-51] UWB + odom EKF 융합 위치 발행 (REQ-42, REQ-45).
+# /onboard/sensors/odom + /onboard/sensors/uwb/pose → EKF → /onboard/sensors/location
+location_node:
+  ros__parameters:
+    odom_topic: "/onboard/sensors/odom"
+    uwb_topic:  "/onboard/sensors/uwb/pose"
+    publish_hz: 20.0
+    frame_id:   "map"

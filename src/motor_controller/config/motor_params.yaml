@@ -5,11 +5,11 @@ motor_controller:
   ros__parameters:
     # Control loop (100 Hz tick = 10 ms; matches REQ-38 motor target)
     control_rate_hz: 100           # rt/arm_sdk native 250 Hz; consider 250 Hz interp if jerky
-    busy_wait_fraction: 0.2        # last 20% of tick busy-wait for low jitter
+    busy_wait_fraction: 0.2        # last 20% of tick busy-wait for low jitter (TODO: not yet used)
+    buf_state_rate_hz: 10.0        # BufState telemetry publish rate
+    dry_run: false                 # true = skip SDK/LocoClient, log dispatch only (bench test)
 
     # Ring buffer (action_queue)
-    # NOTE: motor_controller_node currently hard-codes ActionQueue(slots=64);
-    # this yaml value is documentation-only until param wiring lands.
     ring_buffer_slots: 64
 
     # VLA action-chunk crossfade (joint_buf only, OPTIONAL NX-side fallback).
@@ -27,7 +27,7 @@ motor_controller:
     estop_loco_action: "Damp"
 
     # G1 SDK transport
-    network_interface: "eth0"      # TBD: confirm against onboard wiring
+    network_interface: "eno2"      # TBD: confirm against onboard wiring
     domain_id: 0
 
     # E-STOP shared-memory flag (written by safety_monitor)
