@@ -12,12 +12,14 @@ mic_node:
     channels: 1                   # mono — intentional (LOCKED pipeline — see TASK-31)
     chunk_ms: 20                  # 20 ms → 320 samples / 640 bytes per chunk
 
-# [TASK-31] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
+# [TASK-36] speaker playback (TTS → Onboard). PC TTS must resample to 16 k.
+# Playback is via Unitree SDK AudioClient (not ALSA) — PCM is sent to the robot
+# audio service on PC1 over the internal LAN. 16 kHz / 16-bit / mono is LOCKED in
+# code (AudioPCM.msg), so it is not a runtime param here.
 speaker_node:
   ros__parameters:
-    playback_device: "default"    # TBD: e.g. "hw:CARD=Speaker,DEV=0"
-    sample_rate: 16000            # LOCKED
-    channels: 1                   # mono
+    network_interface: "eth0"     # NX↔G1 LAN iface for AudioClient (ChannelFactoryInitialize)
+    app_name: "speaker_node"      # AudioClient PlayStream application id
     max_queue_depth: 50           # < 256 (SpeakerState.queue_depth uint8); drop OLDEST on overflow
 
 joint_state_node:
