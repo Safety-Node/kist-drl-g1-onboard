@@ -33,6 +33,8 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libffi-dev \
     usbutils \
+    minicom \
+    nano \
     && locale-gen en_US en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
@@ -100,6 +102,19 @@ RUN mkdir -p /etc/apt/keyrings && \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
+# Audio — reSpeaker XVF3800 ALSA capture (mic_node)
+#
+# portaudio19-dev pulls libjack0, replacing libjack-jackd2-0; intentional
+# inside the container (GStreamer/FluidSynth JACK support is unused here).
+# sounddevice + scipy are installed in the pip section below.
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libportaudio2 \
+        portaudio19-dev \
+        libasound2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
 # Python packaging
 #
 # setuptools==59.6.0 keeps ROS 2 Humble ament_python + --symlink-install stable.
@@ -141,7 +156,9 @@ RUN python3 -m pip install \
     --no-cache-dir \
     --no-binary cyclonedds \
     "cyclonedds==0.10.5" \
-    pyserial
+    pyserial \
+    sounddevice \
+    scipy
 
 # -----------------------------------------------------------------------------
 # Unitree SDK2 Python
