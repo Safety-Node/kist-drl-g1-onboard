@@ -32,4 +32,11 @@ def generate_launch_description():
         output='screen',
     )
 
-    return LaunchDescription([outbound, inbound])
+    camera = Node(
+        package='camera_relay',
+        executable='camera_relay',
+        name='camera_relay',
+        output='screen',
+    )
+
+    return LaunchDescription([outbound, camera, inbound])

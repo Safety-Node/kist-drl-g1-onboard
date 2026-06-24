@@ -81,12 +81,17 @@ camera_node:
   ros__parameters:
     enable_color: true
     enable_depth: true
-    color_width: 1280
-    color_height: 720
+    color_width: 640
+    color_height: 480
     color_fps: 30
-    depth_width: 1280
-    depth_height: 720
+    depth_width: 640
+    depth_height: 480
     depth_fps: 30
+    align_depth: true               # register depth to color frame (aligned_depth_to_color)
+    jpeg_quality: 80                 # JPEG quality for color/compressed (1-100)
+    serial_no: ""                   # "" = auto-select; pin a camera e.g. "243122075858"
+    depth_module_enable_auto_exposure: false  # periodic AE update causes ~0.483s depth stall
+    rgb_camera_enable_auto_exposure: false
 
 # [TASK-30] UWB absolute pose (REQ-37). Decawave DWM series, DWM UART shell protocol.
 uwb_node:

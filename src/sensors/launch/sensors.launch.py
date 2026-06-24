@@ -97,18 +97,37 @@ def generate_launch_description():
             cam.get('depth_fps', 30),
         )
 
-        # Topics: /onboard/sensors/{color,depth}/...  (see TASK-32 for camera_name='' rationale)
+        # Topics: /onboard/sensors/camera/{color,depth}/...
+        # camera_name must be non-empty: rs_launch.py maps it to the node name
+        # (name=LaunchConfiguration('camera_name')), and ROS rejects an empty
+        # node name with "Invalid node name: node name must not be empty".
+        # camera_name/namespace stay here (topic structure, ICD); everything
+        # else comes from sensors_params.yaml camera_node.
+        launch_args = {
+            'camera_name':                'camera',
+            'camera_namespace':           '/onboard/sensors',
+            'enable_color':               str(cam.get('enable_color', True)).lower(),
+            'enable_depth':               str(cam.get('enable_depth', True)).lower(),
+            'rgb_camera.color_profile':   color_profile,
+            'depth_module.depth_profile': depth_profile,
+            'align_depth.enable':         str(cam.get('align_depth', True)).lower(),
+            'pointcloud.enable':          str(cam.get('pointcloud_enable', False)).lower(),
+            'log_level':                  str(cam.get('log_level', 'error')),
+            'depth_module.enable_auto_exposure': str(cam.get('depth_module_enable_auto_exposure', True)).lower(),
+            'rgb_camera.enable_auto_exposure':   str(cam.get('rgb_camera_enable_auto_exposure', True)).lower(),
+            # TODO(REQ-42) [TASK-32]: tune QoS.
+        }
+        # Pin a device/port only when set (empty = auto-select first device).
+        serial_no = str(cam.get('serial_no', ''))
+        if serial_no:
+            launch_args['serial_no'] = serial_no
+        usb_port_id = str(cam.get('usb_port_id', ''))
+        if usb_port_id:
+            launch_args['usb_port_id'] = usb_port_id
+
         external_nodes.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(realsense_launch_file),
-            launch_arguments={
-                'camera_name':                '',
-                'camera_namespace':           '/onboard/sensors',
-                'enable_color':               str(cam.get('enable_color', True)).lower(),
-                'enable_depth':               str(cam.get('enable_depth', True)).lower(),
-                'rgb_camera.color_profile':   color_profile,
-                'depth_module.depth_profile': depth_profile,
-                # TODO(REQ-42) [TASK-32]: tune QoS / pointcloud / align_depth_to_color.
-            }.items(),
+            launch_arguments=launch_args.items(),
         ))
     except Exception as e:
         warn = (

@@ -8,11 +8,11 @@ Domain layout:
 Each relay entry subscribes on domain 0 and publishes on domain 1 so the
 workstation can see sensor data without being on the robot's internal domain.
 
-Executor: MultiThreadedExecutor on the domain-0 node so that large-message
-callbacks (e.g. 1.8 MB depth images at 30 Hz) do not block audio/IMU callbacks.
-Without this, a depth callback holding the executor for ~10-30 ms causes the
-depth=1 subscription queue for audio_pcm (50 Hz, 640 B) to overflow and drop
-roughly half the frames before the executor gets back to it.
+Async publish: every relay uses a SimpleQueue + daemon publish thread.
+The domain-0 subscription callback only does q.put(msg) and returns immediately,
+releasing the DDS SHM segment at once. A separate thread calls pub.publish() so
+slow domain-1 publishes (e.g. 1.8 MB depth at 30 Hz) never hold the domain-0
+SHM port and cannot stall the camera publisher or other subscribers.
 
 QoS "stream": BEST_EFFORT + depth=10 on the domain-0 subscriber (onboard-local,
 low-loss IPC). The domain-1 publisher (network-facing) defaults to the same QoS
@@ -28,6 +28,7 @@ parameters (rclpy raises InvalidParameterTypeException), so NO parameters=[]
 in the launch file — see comm_bridge.launch.py.
 """
 import importlib
+import queue as _queue
 import threading
 
 import rclpy
@@ -106,7 +107,9 @@ def main(args=None) -> None:
         rclpy.shutdown(context=ctx_bridge)
         return
 
-    _refs: list = []  # keep sub/pub refs so GC doesn't collect them
+    _refs: list = []       # keep sub/pub/queue/thread refs from GC
+    _queues: list = []
+    _pub_threads: list = []
     count = 0
 
     for entry in relays:
@@ -135,14 +138,32 @@ def main(args=None) -> None:
         # publisher lives on domain 1 (workstation-visible, network-facing)
         pub = node_bridge.create_publisher(msg_cls, dst, qos_pub)
 
-        def _make_cb(p):
+        # Each relay gets its own queue + publish thread so domain-0 callbacks
+        # return immediately (releasing SHM) and domain-1 publishes happen async.
+        q: _queue.SimpleQueue = _queue.SimpleQueue()
+
+        def _make_cb(q):
             def _cb(msg):
-                p.publish(msg)
+                q.put(msg)
             return _cb
 
-        # subscriber lives on domain 0 (onboard-internal)
-        sub = node_onboard.create_subscription(msg_cls, src, _make_cb(pub), qos_sub)
+        def _make_pub_thread(q, p, name):
+            def _run():
+                while True:
+                    msg = q.get()
+                    if msg is None:
+                        return
+                    p.publish(msg)
+            return threading.Thread(target=_run, daemon=True, name=name)
+
+        # subscriber on domain 0; callback only enqueues (q.put), publish is async
+        sub = node_onboard.create_subscription(msg_cls, src, _make_cb(q), qos_sub)
+        t = _make_pub_thread(q, pub, f"pub_{dst.split('/')[-1]}")
+        t.start()
+
         _refs.append((sub, pub))
+        _queues.append(q)
+        _pub_threads.append(t)
         if qos_pub_key != qos_sub_key:
             logger.info(f"relay  {src}  →  {dst}  [sub={qos_sub_key} pub={qos_pub_key}]")
         else:
@@ -160,8 +181,8 @@ def main(args=None) -> None:
     t_bridge = threading.Thread(target=exec_bridge.spin, daemon=True, name="exec_bridge")
     t_bridge.start()
 
-    # domain-0 subscriber node uses MultiThreadedExecutor so depth-image callbacks
-    # don't block audio/IMU callbacks
+    # domain-0 subscriber node: SingleThreadedExecutor is sufficient since
+    # callbacks return immediately (just q.put) and never block each other.
     exec_onboard = MultiThreadedExecutor(context=ctx_onboard)
     exec_onboard.add_node(node_onboard)
     try:
@@ -169,6 +190,10 @@ def main(args=None) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        for q in _queues:
+            q.put(None)  # poison pill — stop each publish thread
+        for t in _pub_threads:
+            t.join(timeout=2.0)
         exec_onboard.shutdown()
         exec_bridge.shutdown()
         t_bridge.join(timeout=5.0)

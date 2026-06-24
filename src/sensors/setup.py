@@ -25,6 +25,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'camera_node      = sensors.camera_node:main',
             'mic_node         = sensors.mic_node:main',
             'speaker_node     = sensors.speaker_node:main',
             'joint_state_node = sensors.joint_state_node:main',

@@ -29,14 +29,7 @@ outbound_relay:
     # /onboard/<src>  →  /bridge/<dst>
     relays:
       # ---------- Sensor streams (BEST_EFFORT — freshness wins) ----------
-      - src:  "/onboard/sensors/color/image_raw/compressed"
-        dst:  "/bridge/sensors/color/compressed"
-        type: "sensor_msgs/msg/CompressedImage"
-        qos:  "best_effort"
-      - src:  "/onboard/sensors/depth/image_raw"
-        dst:  "/bridge/sensors/depth/image_raw"
-        type: "sensor_msgs/msg/Image"
-        qos:  "best_effort"
+      # Camera topics are handled by camera_relay (C++ node) — see camera_relay pkg.
       - src:  "/onboard/sensors/audio/pcm"
         dst:  "/bridge/sensors/audio_pcm"
         type: "g1_onboard_msgs/msg/AudioPCM"

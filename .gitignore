@@ -79,3 +79,7 @@ Thumbs.db
 .env
 .env.local
 *.local.yaml
+
+# Editor / manual backup files
+# ============================================================
+*.bak

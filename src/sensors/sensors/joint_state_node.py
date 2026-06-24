@@ -8,15 +8,17 @@ the ankle IMU topics — see REQ-42 v2026-05-23. Both nodes subscribe to
 G1 SDK lowstate independently; the DDS multi-subscriber cost is
 negligible at the SDK lowstate rate.
 
-Domain: SDK shares ROS 2 domain 0 — _patch_channel_factory() joins the domain
-        rclpy already created, so domain_id MUST match the ROS domain. Raw G1
-        channels (rt/lf/lowstate, ...) stay visible in ros2 topic list on the NX
-        by design; comm_bridge gates the workstation (domain-id-strategy).
+Domain: SDK shares ROS 2 domain 0 — a second DomainParticipant is created
+        on domain 0 (CycloneDDS supports multiple participants per domain
+        per process) and the DataReader is polled inside the timer callback.
+        This replaces ChannelSubscriber whose internal thread busy-polls the
+        DDS reader with no sleep, consuming an entire CPU core even when no
+        robot data arrives.  Polling in the timer adds zero threads and uses
+        CPU only proportional to the publish rate.
 
-Source: unitree_sdk2py ChannelSubscriber on 'rt/lowstate' (unitree_hg.LowState_).
-        Callback runs in the SDK thread; the ROS timer publishes the latest
-        cached frame at publish_rate_hz. 로봇 없이 돌릴 때는 별도 fake
-        publisher 스크립트가 rt/lowstate에 가짜 프레임을 쏘면 됨.
+Source: DataReader on 'rt/lowstate' (unitree_hg.LowState_), polled at
+        publish_rate_hz. 로봇 없이 돌릴 때는 별도 fake publisher 스크립트가
+        rt/lowstate에 가짜 프레임을 쏘면 됨.
 """
 
 from typing import List, Optional, Sequence
@@ -26,39 +28,10 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import JointState
 
-import unitree_sdk2py.core.channel as _sdk_ch
-from unitree_sdk2py.core.channel import ChannelFactory, ChannelSubscriber
+from cyclonedds.domain import DomainParticipant
+from cyclonedds.topic import Topic
+from cyclonedds.sub import DataReader
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-
-
-def _patch_channel_factory() -> None:
-    """Replace ChannelFactory.Init to skip Domain() creation.
-
-    rmw_cyclonedds_cpp and unitree_sdk2py share libddsc.so. Calling
-    Domain(0, config) after rclpy.init() raises DDSException because domain 0
-    already exists. We join the active domain via DomainParticipant() instead.
-    Mirrors imu_node.
-    """
-    from cyclonedds.domain import DomainParticipant as _DDP
-
-    def _init(self, id: int, networkInterface=None, qos=None) -> bool:
-        if self.__class__._ChannelFactory__initialized:
-            return True
-        with self.__class__._ChannelFactory__init_lock:
-            if self.__class__._ChannelFactory__initialized:
-                return True
-            try:
-                self.__class__._ChannelFactory__participant = _DDP(id)
-            except Exception:
-                return False
-            self.__class__._ChannelFactory__qos = qos
-            self.__class__._ChannelFactory__initialized = True
-            return True
-
-    _sdk_ch.ChannelFactory.Init = _init
-
-
-_patch_channel_factory()
 
 
 # Sensor-stream QoS — matches imu_node and the comm_bridge outbound relay
@@ -98,12 +71,11 @@ class JointStateNode(Node):
             str(n) for n in self.get_parameter('joint_names').value]
         domain = int(self.get_parameter('domain_id').value)
 
-        # Join the domain already created by rclpy.init() (see patch above).
-        ChannelFactory().Init(domain)
-
+        # CycloneDDS reader polled in the timer — no background thread.
+        _dp = DomainParticipant(domain)
+        _topic = Topic(_dp, 'rt/lowstate', LowState_)
+        self._dds_reader: DataReader = DataReader(_dp, _topic)
         self._latest: Optional[LowState_] = None
-        self._sub = ChannelSubscriber('rt/lowstate', LowState_)
-        self._sub.Init(self._on_lowstate, 10)
 
         self._joint_pub = self.create_publisher(
             JointState, '/onboard/sensors/joint_states', _BEST_EFFORT_QOS)
@@ -116,15 +88,15 @@ class JointStateNode(Node):
             f'{len(self._joint_names)} joints, '
             f'domain={domain})')
 
-    def _on_lowstate(self, msg: LowState_) -> None:
-        self._latest = msg
-
     def _tick(self) -> None:
-        ls = self._latest
-        if ls is None:
+        samples = self._dds_reader.take(N=1)
+        if samples:
+            self._latest = samples[0]
+
+        if self._latest is None:
             return  # 아직 첫 프레임 수신 전 — silently skip
         stamp = self.get_clock().now().to_msg()
-        js = to_joint_state(ls, self._joint_names, stamp)
+        js = to_joint_state(self._latest, self._joint_names, stamp)
         self._joint_pub.publish(js)
 
 
