@@ -2,12 +2,12 @@
 # TODO(REQ-42): fill real values once HW driver wrappers are integrated.
 
 # [TASK-31] mic capture (Onboard → STT). LOCKED 16 kHz / 16-bit / mono pipeline.
-# Source is reSpeaker XVF3800 ALSA device (NX card 2: Array), captured directly
+# Source is reSpeaker Flex XVF2800 ALSA device, captured directly
 # via sounddevice. Bypasses PC1 UDP multicast whose vui_service VAD cut the
 # stream after each utterance (see TASK-43).
 mic_node:
   ros__parameters:
-    device: "Array"               # reSpeaker XVF3800 ALSA substring match (card 2)
+    device: "reSpeaker"           # reSpeaker Flex XVF2800 ALSA substring match
     sample_rate: 16000            # LOCKED — AudioPCM.msg pipeline format
     channels: 1                   # mono — intentional (LOCKED pipeline — see TASK-31)
     chunk_ms: 20                  # 20 ms → 320 samples / 640 bytes per chunk
