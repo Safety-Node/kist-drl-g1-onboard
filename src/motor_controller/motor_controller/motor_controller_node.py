@@ -32,15 +32,44 @@ from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from geometry_msgs.msg import Twist
 from g1_onboard_msgs.msg import BufState, EstopFlag, JointCmd, JointCmdChunk, LocoCommand
 
+import struct
+
 import unitree_sdk2py.core.channel as _sdk_ch
 from unitree_sdk2py.core.channel import ChannelFactory, ChannelPublisher
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
-from unitree_sdk2py.utils.crc import CRC
 
 from .action_queue import ActionQueue, VelocityCommand
 from .queue_aggregate import crossfade  # noqa: F401
+
+# Pure-Python CRC32 for HG LowCmd_ — avoids crc_aarch64.so dependency.
+# Matches CRC.__PackHGLowCmd + CRC._crc_py from unitree_sdk2py.
+_HG_LOWCMD_FMT = '<2B2x' + 'B3x5fI' * 35 + '5I'
+
+def _hg_lowcmd_crc(cmd) -> int:
+    data = [cmd.mode_pr, cmd.mode_machine]
+    for mc in cmd.motor_cmd[:35]:
+        data += [mc.mode, mc.q, mc.dq, mc.tau, mc.kp, mc.kd,
+                 getattr(mc, 'reserve', 0)]
+    data += list(getattr(cmd, 'reserve', [0, 0, 0, 0]))
+    data.append(0)  # crc placeholder
+    raw = struct.pack(_HG_LOWCMD_FMT, *data)
+    n = (len(raw) >> 2) - 1
+    words = [
+        (raw[i*4+3] << 24) | (raw[i*4+2] << 16) | (raw[i*4+1] << 8) | raw[i*4]
+        for i in range(n)
+    ]
+    crc = 0xFFFFFFFF
+    poly = 0x04C11DB7
+    for w in words:
+        bit = 1 << 31
+        for _ in range(32):
+            crc = ((crc << 1) & 0xFFFFFFFF) ^ (poly if crc & 0x80000000 else 0)
+            if w & bit:
+                crc ^= poly
+            bit >>= 1
+    return crc
 
 
 _RELIABLE_QOS = QoSProfile(
@@ -140,7 +169,6 @@ class MotorControllerNode(Node):
         self._estop_active = False
         self._dds_estop = False
         self._tick_count = 0
-        self._crc = CRC()
         self._arm_sdk_pub: ChannelPublisher | None = None
 
         self._loco = self._init_sdk()
@@ -240,7 +268,7 @@ class MotorControllerNode(Node):
         if unknown:
             self.get_logger().warn(f'unknown joint names in JointCmd: {unknown}')
 
-        low_cmd.crc = self._crc.Crc(low_cmd)
+        low_cmd.crc = _hg_lowcmd_crc(low_cmd)
         self._arm_sdk_pub.Write(low_cmd)
 
     # --- control loop ---
